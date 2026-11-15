@@ -116,13 +116,23 @@ export function Visualizer() {
 
   const b = item?.cutBounds ?? item?.bounds;
   const dims = b ? `${(b.max[0] - b.min[0]).toFixed(1)} × ${(b.max[1] - b.min[1]).toFixed(1)} × ${(b.max[2] - b.min[2]).toFixed(1)} mm` : '';
-  const outside = useMemo(() => {
-    if (!item?.bounds || !connected) return false;
+  // Where the toolpath would leave the machine's travel from the current work zero.
+  const overruns = useMemo(() => {
+    if (!item?.bounds || !connected) return [];
+    const out: string[] = [];
+    const names = ['X', 'Y', 'Z'];
+    const lo = ['left of', 'in front of', 'below'];
+    const hi = ['right of', 'behind', 'above'];
     for (let i = 0; i < 3; i++) {
-      if (item.bounds.min[i] + wco[i] < env.min[i] - 0.01 || item.bounds.max[i] + wco[i] > env.max[i] + 0.01) return true;
+      const under = env.min[i] - (item.bounds.min[i] + wco[i]);
+      const over = item.bounds.max[i] + wco[i] - env.max[i];
+      if (over > 0.01) out.push(`${names[i]} goes ${over.toFixed(1)} mm ${hi[i]} the machine's travel`);
+      if (under > 0.01) out.push(`${names[i]} goes ${under.toFixed(1)} mm ${lo[i]} the machine's travel`);
     }
-    return false;
+    return out;
   }, [item, connected, wco, env]);
+  const unzeroed = connected && wco.every((v) => v === 0);
+  const zAboveTop = connected && wco[2] > env.max[2] + 0.01;
 
   return (
     <div className="viz">
@@ -135,7 +145,16 @@ export function Visualizer() {
             <div className="muted" style={{ fontSize: 12 }}>
               {dims} · ~{formatDuration(item.estSeconds)} · {item.streamLines.toLocaleString()} lines
             </div>
-            {outside && <div style={{ color: 'var(--warn)', fontSize: 12, marginTop: 4 }}>⚠ Toolpath goes outside the machine travel from this work zero</div>}
+            {overruns.length > 0 && (
+              <div className="viz-warn">
+                ⚠ From this work zero the toolpath leaves the machine's travel: {overruns.join('; ')}.{' '}
+                {unzeroed
+                  ? "Work zero hasn't been set, so it's at the home corner. Jog to the job's origin on the stock, then Zero XY and Zero Z."
+                  : zAboveTop
+                    ? `Z zero is ${wco[2].toFixed(1)} mm above the top of Z travel. Jog Z down to the stock surface and Zero Z again.`
+                    : 'Move work zero so the part fits on the bed, or check the file.'}
+              </div>
+            )}
           </div>
         ) : (
           <span />
@@ -173,6 +192,18 @@ export function Visualizer() {
           <span className="swatch" style={{ background: '#4a4a4a' }} />
           Rapid
         </span>
+        {connected && (
+          <>
+            <span title="Everywhere the spindle can reach, from homing and the travel in Settings">
+              <span className="swatch box" />
+              Machine travel
+            </span>
+            <span title="The job's 0,0,0. Set it with Zero XY and Zero Z">
+              <span className="swatch axes" />
+              Work zero
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

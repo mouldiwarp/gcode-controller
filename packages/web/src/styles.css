@@ -1500,3 +1500,26 @@ label.field {
   font-size: 12px;
   white-space: pre-wrap;
 }
+
+.viz-warn {
+  color: var(--warn);
+  font-size: 12px;
+  margin-top: 4px;
+  max-width: 420px;
+  line-height: 1.4;
+}
+.swatch.box {
+  width: 10px;
+  height: 10px;
+  background: none;
+  border: 1px solid #5a5a5a;
+  border-radius: 1px;
+}
+.swatch.axes {
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  background:
+    linear-gradient(#6a9fd9, #6a9fd9) 0 0 / 2px 100% no-repeat,
+    linear-gradient(#d96b6b, #d96b6b) 0 100% / 100% 2px no-repeat;
+}
