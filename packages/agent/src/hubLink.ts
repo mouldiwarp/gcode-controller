@@ -85,7 +85,7 @@ export class HubLink extends EventEmitter<Events> {
         return;
       }
       if (msg.t === 'result') {
-        this.pending.get(msg.reqId)?.(msg);
+        this.pending.get(msg.reqId)?.({ ok: msg.ok, error: msg.error });
         this.pending.delete(msg.reqId);
         return;
       }
