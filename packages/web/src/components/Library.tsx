@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { formatDuration, type LibraryItem } from '@gcc/shared';
-import { jobActive, useStore } from '../store.ts';
+import { jobActive, nextGroupFile, useStore } from '../store.ts';
 
 async function uploadFiles(files: FileList | File[], toast: (l: 'info' | 'error', t: string) => void) {
   for (const f of Array.from(files)) {
@@ -39,6 +39,7 @@ export function LibraryPanel() {
   const input = useRef<HTMLInputElement>(null);
   const canUpload = s.link.hubConnected;
   const active = jobActive(s);
+  const waitingForBit = !!nextGroupFile(s);
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
@@ -106,8 +107,8 @@ export function LibraryPanel() {
                   <div className="actions">
                     <button
                       className="btn small primary"
-                      disabled={active}
-                      title="Start this file"
+                      disabled={active || waitingForBit}
+                      title={waitingForBit ? 'A group is waiting for a bit change: use Start next or End group' : 'Start this file'}
                       onClick={(e) => {
                         e.stopPropagation();
                         setPreview(f.id);

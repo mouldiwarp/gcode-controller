@@ -90,9 +90,9 @@ function ProbeBody({ onClose }: { onClose: () => void }) {
           <dd className="mono">{m.wpos[2].toFixed(3)}</dd>
         </dl>
 
-        {m.probing && <div className="banner">Probing… Hold or Stop at the top of the page abort it.</div>}
+        {m.probing && <div className="banner info">Probing… Hold or Stop at the top of the page abort it.</div>}
         {result && (
-          <div className={`banner ${result.ok ? '' : 'warn'}`} style={result.ok ? { borderColor: 'var(--gold)' } : undefined}>
+          <div className={`banner ${result.ok ? 'ok' : ''}`}>
             <strong>{result.ok ? 'Done' : 'Failed'}</strong> {result.message}
           </div>
         )}

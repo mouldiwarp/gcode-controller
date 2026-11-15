@@ -472,6 +472,21 @@ label.field {
   color: #f6dcae;
 }
 
+.banner.ok,
+.banner.info {
+  background: rgba(197, 160, 89, 0.1);
+  border-color: rgba(197, 160, 89, 0.45);
+  color: var(--white);
+}
+
+.banner.ok strong {
+  color: var(--gold);
+}
+
+.modal .banner {
+  border: 1px solid;
+}
+
 .banner strong {
   font-family: var(--font-heading);
   letter-spacing: 0.1em;
