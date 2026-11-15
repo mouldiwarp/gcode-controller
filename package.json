@@ -1,0 +1,34 @@
+{
+  "name": "gcode-controller",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Networked GRBL sender: a hub on your design Mac, a USB agent next to the machine, and a synced browser UI on both.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/agent",
+    "packages/hub",
+    "packages/web"
+  ],
+  "scripts": {
+    "hub": "npm run build:web && tsx packages/hub/src/main.ts",
+    "agent": "npm run build:web && tsx packages/agent/src/main.ts",
+    "dev:web": "npm --workspace @gcc/web run dev",
+    "build:web": "npm --workspace @gcc/web run build",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/agent && tsc -p packages/hub && tsc -p packages/web",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0"
+  }
+}
