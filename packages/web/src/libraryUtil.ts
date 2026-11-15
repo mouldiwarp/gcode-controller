@@ -59,6 +59,12 @@ export function filesIn(library: LibraryItem[], folder: string): LibraryItem[] {
   });
 }
 
+/** "2 of 3": a file's place in its group, counted from the files actually in the library. */
+export function groupPosition(library: LibraryItem[], f: LibraryItem): string {
+  const files = library.filter((x) => x.group === f.group).sort((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
+  return `${files.findIndex((x) => x.id === f.id) + 1} of ${files.length}`;
+}
+
 /** Number of files in a folder and everything below it. */
 export function countIn(library: LibraryItem[], folder: string): number {
   return library.filter((f) => f.folder === folder || f.folder?.startsWith(`${folder}/`)).length;

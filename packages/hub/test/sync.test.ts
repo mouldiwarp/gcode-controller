@@ -162,6 +162,16 @@ describe('hub ↔ agent sync', () => {
     expect(await studio.cmd({ type: 'startNext' })).toMatchObject({ ok: false });
   });
 
+  it('clears the probe pin on the studio browser once the plate is lifted away', async () => {
+    const { agent, studio, garage } = await setup();
+    const z = garage.state!.machine.mpos[2];
+    agent.sim!.opts.probeSurfaceZ = z; // touching where the bit is now
+    await until(() => !!studio.state!.machine.pins?.includes('P'), 3000, 'pin closed on the studio');
+    agent.sim!.opts.probeSurfaceZ = z - 20; // plate taken away
+    await until(() => !garage.state!.machine.pins, 3000, 'pin open in the garage');
+    await until(() => !studio.state!.machine.pins, 3000, 'pin open on the studio');
+  });
+
   it('ends a group early with clearJob', async () => {
     const { hubPort, studio } = await setup(400);
     const ids: string[] = [];

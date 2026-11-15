@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { formatDuration, type LibraryItem } from '@gcc/shared';
 import { useStore } from '../store.ts';
-import { ago, baseName, childFolders, countIn, depth, dims, filesIn, GCODE_ACCEPT, parentOf, uploadFiles } from '../libraryUtil.ts';
+import { ago, baseName, childFolders, countIn, depth, dims, filesIn, GCODE_ACCEPT, groupPosition, parentOf, uploadFiles } from '../libraryUtil.ts';
 
 const FILE_MIME = 'application/x-gcc-file';
 
@@ -284,6 +284,7 @@ function TreeRow({
 }
 
 function ManagerFile({ f, folders, online, onClose }: { f: LibraryItem; folders: string[]; online: boolean; onClose: () => void }) {
+  const library = useStore((x) => x.state!.library);
   const run = useStore((x) => x.run);
   const setPreview = useStore((x) => x.setPreview);
   const previewId = useStore((x) => x.previewId);
@@ -331,7 +332,7 @@ function ManagerFile({ f, folders, online, onClose }: { f: LibraryItem; folders:
         )}
         <div className="meta">
           <span className={`badge ${f.source !== 'Upload' && f.source !== 'Finder' ? 'gold' : ''}`}>{f.source}</span>
-          {f.group && <span className="muted">{f.group} #{(f.groupIndex ?? 0) + 1} · </span>}~{formatDuration(f.estSeconds)} · {dims(f)} mm · {ago(f.addedAt)}
+          {f.group && <span className="muted">{f.group} {groupPosition(library, f)} · </span>}~{formatDuration(f.estSeconds)} · {dims(f)} mm · {ago(f.addedAt)}
         </div>
       </div>
       <div className="mfile-actions">

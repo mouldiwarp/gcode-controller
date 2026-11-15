@@ -234,8 +234,8 @@ export class Hub {
         this.broadcast({ t: 'patch', patch: { machine: this.machine, job: this.job, link: this.snapshot().link } });
         return;
       case 'patch':
-        if (msg.machine) this.machine = { ...this.machine, ...msg.machine };
-        if (msg.job) this.job = msg.job as JobState;
+        if (msg.machine) this.machine = msg.machine;
+        if (msg.job) this.job = msg.job;
         this.broadcast({ t: 'patch', patch: { ...(msg.machine ? { machine: this.machine } : {}), ...(msg.job ? { job: this.job } : {}) } });
         return;
       case 'console':

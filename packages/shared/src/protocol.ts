@@ -223,7 +223,8 @@ export type ClientMessage = { t: 'hello'; name: string } | { t: 'cmd'; reqId: st
 export type AgentToHub =
   | { t: 'hello'; name: string; version: string }
   | { t: 'state'; machine: MachineState; job: JobState }
-  | { t: 'patch'; machine?: Partial<MachineState>; job?: Partial<JobState> }
+  /** Whole objects, not partial: a field the agent drops (pins, alarm, probing) must clear on the hub too. */
+  | { t: 'patch'; machine?: MachineState; job?: JobState }
   | { t: 'console'; lines: ConsoleLine[] }
   | { t: 'result'; reqId: string; ok: boolean; error?: string }
   | { t: 'cmd'; reqId: string; cmd: Command; by: string }
