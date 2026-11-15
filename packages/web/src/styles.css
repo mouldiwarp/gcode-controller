@@ -1483,6 +1483,11 @@ label.field {
   flex-wrap: wrap;
 }
 
+.update-blocked {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
 .update-help {
   margin: 0;
   padding-left: 20px;

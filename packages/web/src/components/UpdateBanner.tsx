@@ -64,6 +64,7 @@ export function UpdateBanner() {
           )}
         </span>
         <span className="spacer" />
+        {canUpdate && blockedBy && !update?.running && <span className="update-blocked">{blockedBy}</span>}
         {canUpdate && (
           <button
             className="btn small primary"
