@@ -12,13 +12,52 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 4 | Hub: library, upload API, inbox, Bonjour, sync | ✅ |
 | 5 | Web UI: DRO, jog, zero, 3D progress, library, console, overrides, macros | ✅ |
 | 6 | Sync hardening: restart mid-job, multi-browser tests, double-click launchers, setup guide | ✅ |
-| 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | ⬜ |
-| 8 | Real machine bring-up (FoxAlien XE-Ultra) | ⬜ |
+| 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | 🚧 built on `send-to-gcode-controller` branches, waiting to be merged |
+| 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
-## Backlog
+## Next up
 
-### Machine bring-up (when the XE-Ultra arrives)
-- ⬜ Confirm the firmware with `$I` (GRBL 1.1 vs a FoxAlien variant) and the RX buffer size.
-- ⬜ Read `$$` and set the machine envelope from `$130`–`$132` automatically.
-- ⬜ Confirm the homing corner and direction (`$23`) and draw the envelope in the right place.
-- ⬜ First air cut with Z zeroed 20 mm above the stock.
+### Machine bring-up (when the machine arrives)
+- ⬜ Confirm the firmware with `$I` (GRBL 1.1 or a FoxAlien variant) and the RX buffer size it reports.
+- ⬜ Read `$$` and set the machine travel from `$130`–`$132` (there's a **Read from GRBL** button in Settings).
+- ⬜ Confirm the homing corner (`$23`) and draw the envelope in the right place. Today the envelope assumes
+  GRBL's default (machine 0,0,0 at back-right-top).
+- ⬜ Check spindle control: `M3 S…` against `$30`/`$31` with the 1.5 kW VFD.
+- ⬜ First air cut of `samples/test-square.nc` with Z zeroed 20 mm above the stock.
+
+### Workflow features (from UGS and WorkBee)
+- ⬜ **Z probe with a touch plate** (`G38.2`), with plate thickness in Settings. WorkBee Control had this; it's
+  the biggest time-saver for setting Z.
+- ⬜ **Run a job group in order.** Swarf sends one file per tool (and side A / side B). Add "Run next file"
+  with a pause for the bit change and a Z re-probe in between.
+- ⬜ **Continuous jog:** hold a button or key to jog, release to stop (`$J=` plus jog cancel).
+- ⬜ **Resume from line N** after a stop, with a safe preamble (spindle on, move to safe Z, then XY, then down).
+- ⬜ **Check mode** (`$C`) dry run, which streams the file through GRBL's parser without moving, to catch
+  errors before cutting.
+- ⬜ **Block a start** when the toolpath goes outside the machine travel. Today the UI only warns.
+- ⬜ **Settings editor:** change `$` settings from the table instead of typing them in the console.
+
+### Visualizer
+- ⬜ Track the executing line exactly by adding `N` line numbers and reading `Ln:` from status reports.
+  Today it's estimated from acknowledged lines minus the planner queue.
+- ⬜ Depth-aware drawing. Later passes over the same XY at a lower Z draw over cut segments, which hides
+  some of the gold. Draw finished segments on top, or add a "hide below current Z" slider.
+- ⬜ Parse large files (3D finishing passes run to 1M+ lines) in a Web Worker so the UI never stutters.
+- 💡 Stock box and simulated material removal, like Swarf's simulation.
+
+### Comfort and safety
+- ⬜ Browser notification and sound when a job finishes, pauses on an error or alarms.
+- ⬜ Touch-friendly "garage mode": bigger buttons, full screen, wake lock so the display stays on.
+- ⬜ Job history: what ran, when, how long, who started it, and how it ended.
+- ⬜ Warn when hub and agent versions differ.
+- ⬜ Replace the browser's delete confirmation with an in-app dialog.
+- 💡 Optional PIN for starting jobs, in case other people use the home network.
+- 💡 Webcam view of the machine in the UI.
+- 💡 Height-map probing and auto-levelling for engraving on uneven stock.
+
+### Engineering
+- ⬜ Playwright end-to-end test with two real browsers. Today the same flows are covered by WebSocket
+  integration tests and were checked by hand in Chrome.
+- ⬜ Package the hub and agent as a single download (Node runtime included), so the garage Mac doesn't
+  need Node installed.
+- 💡 Bonjour discovery in the Swift apps, if the hub ever moves off the design Mac.
