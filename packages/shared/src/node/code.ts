@@ -112,13 +112,14 @@ export class Updater extends EventEmitter<{ progress: [UpdateProgress]; log: [st
       const nodeDir = dirname(process.execPath);
       const child = spawn(step.cmd, step.args, {
         cwd: this.repo,
-        env: { ...process.env, PATH: `${nodeDir}:${process.env.PATH ?? '/usr/bin:/bin'}`, FORCE_COLOR: '0', GIT_TERMINAL_PROMPT: '0' },
+        env: { ...process.env, PATH: `${nodeDir}:${process.env.PATH ?? '/usr/bin:/bin'}`, FORCE_COLOR: '0', NO_COLOR: '1', GIT_TERMINAL_PROMPT: '0' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       const lines: string[] = [];
       const take = (b: Buffer) => {
         for (const l of String(b).split('\n')) {
-          const t = l.trim();
+          // eslint-disable-next-line no-control-regex
+          const t = l.replace(/\x1b\[[0-9;]*m/g, '').trim();
           if (!t) continue;
           lines.push(t);
           this.emit('log', t);

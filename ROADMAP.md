@@ -16,6 +16,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | ✅ merged into main in both apps |
 | 7b | Z probe with a touch plate; run a file group in order with bit-change stops | ✅ (simulator-tested; check on the machine) |
 | 7c | Library manager: project folders in `~/Documents/GCode Controller`, kept in step with Finder | ✅ |
+| 7d | Version checks: an out-of-date agent is held until it's updated, with Update now | ✅ |
 | 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
 ## Next up

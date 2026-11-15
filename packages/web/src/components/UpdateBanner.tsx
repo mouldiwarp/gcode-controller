@@ -85,8 +85,8 @@ export function UpdateBanner() {
             {canUpdate ? (
               <>
                 Press <b>Update now</b>. It downloads the latest code, installs packages, rebuilds the UI and restarts the {target}
-                {behind?.supervised ? '.' : ': it was started from Terminal, so start it again there afterwards.'} This page reloads when
-                it's back.
+                {behind?.supervised ? '.' : ': it was started from Terminal, so start it again there afterwards.'} This banner clears when
+                it's back, and pages reload themselves if they need the new version.
               </>
             ) : (
               <>This {target} is too old to update itself, so update it by hand on the {mac}.</>

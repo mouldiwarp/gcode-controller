@@ -109,6 +109,24 @@ To launch without the app, double-click:
 
 Each opens a Terminal window, starts the server and opens the UI in your browser. Close the window to stop it.
 
+## Updating
+
+Each server knows which git commit it started from. When the agent connects, the hub tells it which code it
+runs, and if the agent's is older:
+
+- A banner on every browser says which Mac is behind, with **Update now** and **How to update**.
+- The agent **won't move the machine** (start, jog, home, probe, MDI, macros) until it's updated. Hold, Stop and
+  Reset always work, and a job or file group already under way finishes first. The hub enforces this too, so an
+  agent from before version checks is held as well.
+- **Update now** runs `git pull --ff-only`, `npm install` and a web build on that Mac, then restarts the server.
+  The Mac app and the double-click launchers start the new code by themselves; if you ran `npm run agent` by
+  hand, start it again. Pages reload themselves when the server they talk to has newer code.
+- If you've changed files in that checkout, the pull is refused rather than touching them: commit or stash them
+  and try again.
+
+By hand, on the Mac that's behind: `git pull && npm install`, then restart the hub or agent. A hub that's behind
+the agent only gets a reminder, and can be updated the same way, even during a job (the agent streams it).
+
 ## The library
 
 Your G-code lives in ordinary folders under **`~/Documents/GCode Controller`** on the design Mac, one folder per
