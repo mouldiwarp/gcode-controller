@@ -73,12 +73,14 @@ yourself, pass `--hub http://design-mac.local:8080`.
 See **[docs/SETUP.md](docs/SETUP.md)** for the full two-Mac walkthrough, including testing the sync with the
 simulator before the machine arrives.
 
-### Start at login
+### Launching by double-click
 
-```sh
-scripts/install-launchd.sh hub      # on the design Mac
-scripts/install-launchd.sh agent    # on the machine Mac (add --simulate to test)
-```
+Nothing starts automatically. To launch from Finder, double-click:
+
+- **`Start Hub.command`** on the design Mac
+- **`Start Agent.command`** on the machine Mac, or **`Start Agent (Simulator).command`** to test without the machine
+
+Each opens a Terminal window, starts the server and opens the UI in your browser. Close the window to stop it.
 
 ## Sending G-code
 

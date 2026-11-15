@@ -35,7 +35,7 @@ The hub prints its addresses, for example:
            http://192.168.1.20:8080
 ```
 
-To start it at every login instead: `scripts/install-launchd.sh hub`.
+Or double-click **`Start Hub.command`** in the project folder. It opens a Terminal window and the UI. Close the window to stop the hub.
 
 ## 3. Garage Mac: run the agent
 
@@ -73,7 +73,7 @@ Add `--sim-speed 5` to make simulated jobs run five times faster.
 
    If more than one port is marked, choose one with `--serial /dev/cu.wchusbserial110` (use your port's name).
 
-To start it at every login: `scripts/install-launchd.sh agent` (add `--simulate` while testing).
+Or double-click **`Start Agent.command`** (or **`Start Agent (Simulator).command`** while testing). Close its Terminal window to stop the agent.
 
 ## 4. Open the UI
 

@@ -11,7 +11,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 3 | Agent: serial streamer, machine state, job control | ✅ |
 | 4 | Hub: library, upload API, inbox, Bonjour, sync | ✅ |
 | 5 | Web UI: DRO, jog, zero, 3D progress, library, console, overrides, macros | ✅ |
-| 6 | Sync hardening: restart mid-job, multi-browser tests, launchd, setup guide | ✅ |
+| 6 | Sync hardening: restart mid-job, multi-browser tests, double-click launchers, setup guide | ✅ |
 | 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | ⬜ |
 | 8 | Real machine bring-up (FoxAlien XE-Ultra) | ⬜ |
 
