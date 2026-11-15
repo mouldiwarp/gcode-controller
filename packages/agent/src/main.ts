@@ -3,7 +3,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_AGENT_PORT } from '@gcc/shared';
-import { parseArgs } from '@gcc/shared/node';
+import { describeCode, parseArgs, RESTART_EXIT_CODE } from '@gcc/shared/node';
 import { Agent } from './agent.ts';
 import { listPorts } from './transport.ts';
 
@@ -42,6 +42,7 @@ const agent = new Agent({
   serialPath: typeof args.serial === 'string' ? args.serial : undefined,
   baudRate: args.baud ? Number(args.baud) : undefined,
   name: typeof args.name === 'string' ? args.name : undefined,
+  onRestart: () => void restartAfterUpdate(),
 });
 
 let port: number;
@@ -64,6 +65,16 @@ agent.hub.on('url', (u) => console.log(`  Found hub at ${u}`));
 agent.controller.on('console', (lines) => {
   for (const l of lines) if (l.dir === 'info' || l.dir === 'error') console.log(`  [${l.dir}] ${l.text}`);
 });
+
+console.log(`  Code:    ${describeCode(agent.code)}`);
+
+// After an update: exit with RESTART_EXIT_CODE. The Mac app and the double-click launchers
+// start the new code; run by hand, it says how.
+async function restartAfterUpdate(): Promise<void> {
+  await agent.stop();
+  if (!agent.code.supervised) console.log('\nUpdated. Start it again with: npm run agent\n');
+  process.exit(RESTART_EXIT_CODE);
+}
 
 const shutdown = async () => {
   await agent.stop();

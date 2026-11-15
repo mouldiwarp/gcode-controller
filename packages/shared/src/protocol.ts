@@ -154,6 +154,87 @@ export interface AppState {
   macros: Macro[];
   config: MachineConfig;
   console: ConsoleLine[];
+  /** Which code the hub and agent are running, and whether either is behind. */
+  code?: CodeState;
+}
+
+// ---- Code versions and updates ----
+
+/** The code a server is running: the git commit it started from and when that commit was made. */
+export interface CodeVersion {
+  /** package.json version. */
+  version: string;
+  /** Full git commit hash, when running from a git checkout. */
+  commit?: string;
+  /** Commit time (ms since 1970). */
+  time?: number;
+}
+
+export interface UpdateProgress {
+  running: boolean;
+  /** What it's doing now, e.g. "Downloading the latest code (git pull)". */
+  step?: string;
+  error?: string;
+}
+
+/** One server's code, and what it can do about updating itself. */
+export interface ServerCode extends CodeVersion {
+  /** The checkout it runs from, for the manual instructions. */
+  repo?: string;
+  /** A git checkout that can pull and rebuild itself. */
+  canUpdate: boolean;
+  /** Started by the Mac app or a double-click launcher, which restart it after an update. */
+  supervised: boolean;
+  update?: UpdateProgress;
+}
+
+export interface CodeState {
+  hub?: ServerCode;
+  agent?: ServerCode;
+  /**
+   * The agent runs older code than the hub (or predates version checks). It won't move the machine
+   * until it's updated, though a job or group already under way can finish.
+   */
+  agentBehind: boolean;
+  /** The hub runs older code than the agent. Everything still works; update the hub when you can. */
+  hubBehind: boolean;
+}
+
+export type CodeComparison = 'same' | 'behind' | 'ahead' | 'different' | 'unknown';
+
+/** How `mine` compares with `theirs`, by commit and commit time. */
+export function compareCode(mine?: CodeVersion, theirs?: CodeVersion): CodeComparison {
+  if (!mine?.commit || !theirs?.commit) return 'unknown';
+  if (mine.commit === theirs.commit) return 'same';
+  if (mine.time === undefined || theirs.time === undefined) return 'different';
+  if (mine.time < theirs.time) return 'behind';
+  if (mine.time > theirs.time) return 'ahead';
+  return 'different';
+}
+
+/**
+ * Work out the code state from what each side reports. `agentKnown` is false for an agent
+ * that connected without saying which code it runs: it predates version checks, so it's behind.
+ */
+export function codeState(hub: ServerCode | undefined, agent: ServerCode | undefined, agentConnected: boolean): CodeState {
+  const agentBehind = agentConnected && !!hub && (agent ? compareCode(agent, hub) === 'behind' : true);
+  const hubBehind = agentConnected && !!agent && !!hub && compareCode(hub, agent) === 'behind';
+  return { hub, agent, agentBehind, hubBehind };
+}
+
+/** Commands an out-of-date agent refuses once it's idle: anything that moves the machine. */
+const MOVES_MACHINE = new Set<Command['type']>(['start', 'startNext', 'jog', 'home', 'goToZero', 'mdi', 'runMacro', 'probeZ']);
+
+/** Why an out-of-date agent won't run this command, or undefined if it may. */
+export function outdatedRefusal(cmd: Command, job: JobState, code: CodeState | undefined): string | undefined {
+  if (!code?.agentBehind || !MOVES_MACHINE.has(cmd.type)) return undefined;
+  // Never strand work in progress: a running job, or a group waiting for its next file, carries on.
+  if (['loading', 'running', 'paused', 'stopping', 'toolchange'].includes(job.status)) return undefined;
+  return "The machine Mac (agent) is running older code than the hub, so it won't move the machine until it's updated. Use Update now in the banner, or see How to update.";
+}
+
+export function shortCommit(c?: CodeVersion): string {
+  return c?.commit ? c.commit.slice(0, 7) : 'unknown';
 }
 
 export type OverrideKind = 'feed' | 'rapid' | 'spindle';
@@ -189,7 +270,9 @@ export type Command =
   | { type: 'deleteFolder'; path: string }
   | { type: 'saveMacro'; macro: Macro }
   | { type: 'deleteMacro'; id: string }
-  | { type: 'saveConfig'; config: Partial<MachineConfig> };
+  | { type: 'saveConfig'; config: Partial<MachineConfig> }
+  /** Pull the latest code, rebuild and restart that server. */
+  | { type: 'update'; target: 'hub' | 'agent' };
 
 export const LIBRARY_COMMANDS = new Set<Command['type']>([
   'deleteFile',
@@ -221,7 +304,9 @@ export type ClientMessage = { t: 'hello'; name: string } | { t: 'cmd'; reqId: st
 // ---- Agent <-> hub ----
 
 export type AgentToHub =
-  | { t: 'hello'; name: string; version: string }
+  | { t: 'hello'; name: string; version: string; code?: ServerCode }
+  /** The agent's code changed state (an update started, failed or finished). */
+  | { t: 'code'; code: ServerCode }
   | { t: 'state'; machine: MachineState; job: JobState }
   /** Whole objects, not partial: a field the agent drops (pins, alarm, probing) must clear on the hub too. */
   | { t: 'patch'; machine?: MachineState; job?: JobState }
@@ -231,6 +316,8 @@ export type AgentToHub =
   | { t: 'toast'; level: 'info' | 'warn' | 'error'; text: string };
 
 export type HubToAgent =
+  /** Sent in answer to hello, and again whenever the hub's update state changes. */
+  | { t: 'code'; code: ServerCode }
   | { t: 'library'; library: LibraryItem[]; folders: string[]; libraryRoot?: string; macros: Macro[]; config: MachineConfig; hubName: string }
   | { t: 'cmd'; reqId: string; cmd: Command; by: string }
   | { t: 'result'; reqId: string; ok: boolean; error?: string };

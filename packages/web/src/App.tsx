@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { connect, useStore } from './store.ts';
 import { TopBar, Banners } from './components/TopBar.tsx';
+import { UpdateBanner } from './components/UpdateBanner.tsx';
 import { DroPanel } from './components/Dro.tsx';
 import { JogPanel } from './components/Jog.tsx';
 import { Visualizer } from './components/Visualizer.tsx';
@@ -35,6 +36,7 @@ export function App() {
     <div className="app">
       <TopBar />
       <div>
+        <UpdateBanner />
         <Banners />
       </div>
       <main className="main">

@@ -7,24 +7,28 @@ import { hostname } from 'node:os';
 import { Bonjour, type Service } from 'bonjour-service';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
+  codeState,
   DEFAULT_HUB_PORT,
   HUB_SERVICE_TYPE,
   initialJob,
   initialMachine,
   isLibraryCommand,
+  outdatedRefusal,
   PROTOCOL_VERSION,
   randomId,
   type AgentToHub,
   type AppState,
   type ClientMessage,
+  type CodeState,
   type Command,
   type ConsoleLine,
   type HubToAgent,
   type JobState,
   type MachineState,
+  type ServerCode,
   type ServerMessage,
 } from '@gcc/shared';
-import { readBody, sendJson, serveStatic, WEB_DIST } from '@gcc/shared/node';
+import { readBody, readCode, sendJson, serveStatic, Updater, WEB_DIST, type UpdateStep } from '@gcc/shared/node';
 import { InboxWatcher } from './inbox.ts';
 import { LibraryStore } from './library.ts';
 
@@ -40,6 +44,12 @@ export interface HubOptions {
   advertise?: boolean;
   name?: string;
   webRoot?: string;
+  /** The code this hub runs (default: read from the git checkout). Tests pass their own. */
+  code?: ServerCode;
+  /** The update steps (default: git pull, npm install, build the web UI). */
+  updateSteps?: UpdateStep[];
+  /** Called after a successful update; main.ts exits so the launcher starts the new code. */
+  onRestart?: () => void;
 }
 
 interface Client {
@@ -56,6 +66,12 @@ export class Hub {
   job: JobState = initialJob();
   console: ConsoleLine[] = [];
   agentName?: string;
+  /** The code this hub runs, and the agent's as it reported it in hello. */
+  readonly code: ServerCode;
+  agentCode?: ServerCode;
+  readonly updater: Updater;
+  /** The connected agent has said hello (an agent that says nothing about its code is too old to). */
+  private agentHello = false;
 
   private server?: Server;
   private wss?: WebSocketServer;
@@ -71,6 +87,8 @@ export class Hub {
   constructor(readonly opts: HubOptions) {
     this.library = new LibraryStore({ dataDir: opts.dataDir, libraryDir: opts.libraryDir, trash: opts.trash });
     this.name = opts.name ?? hostname().replace(/\.local$/, '');
+    this.code = opts.code ?? readCode();
+    this.updater = new Updater(this.code.repo ?? '.', opts.updateSteps);
   }
 
   // ---------------- Lifecycle ----------------
@@ -149,7 +167,20 @@ export class Hub {
       macros: this.library.macros,
       config: this.library.config,
       console: this.console,
+      code: this.codeState(),
     };
+  }
+
+  private get myCode(): ServerCode {
+    return { ...this.code, update: this.updater.progress };
+  }
+
+  codeState(): CodeState {
+    return codeState(this.myCode, this.agentCode, this.agentConnected && this.agentHello);
+  }
+
+  private broadcastCode(): void {
+    this.broadcast({ t: 'patch', patch: { code: this.codeState() } });
   }
 
   private broadcast(msg: ServerMessage): void {
@@ -190,6 +221,8 @@ export class Hub {
   private onAgent(ws: WebSocket): void {
     if (this.agent && this.agent !== ws) this.agent.terminate();
     this.agent = ws;
+    this.agentHello = false;
+    this.agentCode = undefined;
     this.sendLibraryToAgent();
 
     let alive = true;
@@ -216,7 +249,9 @@ export class Hub {
       for (const [, resolve] of this.pending) resolve({ ok: false, error: 'Lost connection to the machine agent' });
       this.pending.clear();
       this.machine = { ...this.machine, connection: 'disconnected' };
-      this.broadcast({ t: 'patch', patch: { link: this.snapshot().link, machine: this.machine } });
+      this.agentHello = false;
+      this.agentCode = undefined;
+      this.broadcast({ t: 'patch', patch: { link: this.snapshot().link, machine: this.machine, code: this.codeState() } });
     });
     ws.on('error', () => undefined);
   }
@@ -225,8 +260,15 @@ export class Hub {
     switch (msg.t) {
       case 'hello':
         this.agentName = msg.name;
+        this.agentHello = true;
+        this.agentCode = msg.code;
         this.console = [];
-        this.broadcast({ t: 'patch', patch: { link: this.snapshot().link } });
+        this.sendAgent({ t: 'code', code: this.myCode });
+        this.broadcast({ t: 'patch', patch: { link: this.snapshot().link, code: this.codeState() } });
+        return;
+      case 'code':
+        this.agentCode = msg.code;
+        this.broadcastCode();
         return;
       case 'state':
         this.machine = msg.machine;
@@ -258,7 +300,20 @@ export class Hub {
   // ---------------- Commands ----------------
 
   async execute(cmd: Command, by: string): Promise<{ ok: boolean; error?: string }> {
-    if (!isLibraryCommand(cmd)) return this.forwardToAgent(cmd, by);
+    if (cmd.type === 'update' && cmd.target === 'hub') {
+      try {
+        this.update(by);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    }
+    if (!isLibraryCommand(cmd)) {
+      // Checked here as well as on the agent, so an agent too old to check for itself is held too.
+      const refusal = outdatedRefusal(cmd, this.job, this.codeState());
+      if (refusal) return { ok: false, error: refusal };
+      return this.forwardToAgent(cmd, by);
+    }
     try {
       switch (cmd.type) {
         case 'deleteFile':
@@ -298,6 +353,40 @@ export class Hub {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  }
+
+  /** Pull, install and rebuild in the background, then restart. A running job carries on at the agent. */
+  private update(by: string): void {
+    if (!this.code.canUpdate) {
+      throw new Error(`The hub isn't running from a git checkout, so it can't update itself. Update ${this.code.repo} by hand, then restart it`);
+    }
+    if (this.updater.running) throw new Error('The hub is already updating');
+    if (this.job.status === 'loading') throw new Error('Wait until the job has finished loading');
+
+    const log = (dir: ConsoleLine['dir'], text: string) => this.addConsole([{ t: Date.now(), dir, text }]);
+    log('info', `Updating the hub (asked by ${by})`);
+    const onProgress = () => {
+      this.sendAgent({ t: 'code', code: this.myCode });
+      this.broadcastCode();
+    };
+    const onLog = (line: string) => log('info', line);
+    this.updater.on('progress', onProgress);
+    this.updater.on('log', onLog);
+    this.updater
+      .run()
+      .then(() => {
+        log('info', 'Hub updated. Restarting…');
+        this.toast('info', this.code.supervised ? 'Hub updated. It restarts by itself in a moment' : 'Hub updated. Start it again on the design Mac (npm run hub)');
+        setTimeout(() => this.opts.onRestart?.(), 1500);
+      })
+      .catch((err) => {
+        log('error', (err as Error).message);
+        this.toast('error', `Hub update failed: ${(err as Error).message}`);
+      })
+      .finally(() => {
+        this.updater.off('progress', onProgress);
+        this.updater.off('log', onLog);
+      });
   }
 
   private get jobBusy(): boolean {

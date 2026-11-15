@@ -3,7 +3,7 @@
 import { homedir, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_HUB_PORT } from '@gcc/shared';
-import { parseArgs } from '@gcc/shared/node';
+import { describeCode, parseArgs, RESTART_EXIT_CODE } from '@gcc/shared/node';
 import { Hub } from './hub.ts';
 
 const args = parseArgs(process.argv.slice(2));
@@ -29,6 +29,7 @@ const hub = new Hub({
   inboxDir: args['no-inbox'] ? undefined : String(args.inbox ?? join(homedir(), 'GCode Inbox')),
   advertise: !args['no-bonjour'],
   name: typeof args.name === 'string' ? args.name : undefined,
+  onRestart: () => void restartAfterUpdate(),
 });
 
 let port: number;
@@ -54,6 +55,16 @@ for (const u of lan) console.log(`           ${u}`);
 console.log(`  Upload:  curl -X POST --data-binary @part.nc -H 'X-Filename: part.nc' http://localhost:${port}/api/jobs`);
 console.log(`  Library: ${hub.library.root}`);
 if (hub.opts.inboxDir) console.log(`  Inbox:   ${hub.opts.inboxDir}`);
+
+console.log(`  Code:    ${describeCode(hub.code)}`);
+
+// After an update: exit with RESTART_EXIT_CODE. The Mac app and the double-click launchers
+// start the new code; run by hand, it says how.
+async function restartAfterUpdate(): Promise<void> {
+  await hub.stop();
+  if (!hub.code.supervised) console.log('\nUpdated. Start it again with: npm run hub\n');
+  process.exit(RESTART_EXIT_CODE);
+}
 
 const shutdown = async () => {
   await hub.stop();

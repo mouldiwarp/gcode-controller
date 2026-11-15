@@ -7,4 +7,10 @@ cd "$(dirname "$0")"
 [[ -d node_modules ]] || npm install
 npm run build:web >/dev/null || exit 1
 (sleep 3 && open "http://localhost:8081") &
-exec npx tsx packages/agent/src/main.ts "$@"
+# Exit code 75 means "updated, start me again" (Update now in the UI).
+export GCC_SUPERVISED=1
+while true; do
+  npx tsx packages/agent/src/main.ts "$@"
+  [[ $? -eq 75 ]] || break
+  echo "\nUpdated. Restarting the agent…\n"
+done

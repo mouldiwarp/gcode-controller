@@ -111,6 +111,7 @@ function onMessage(msg: ServerMessage): void {
   const { state } = useStore.getState();
   switch (msg.t) {
     case 'snapshot': {
+      if (reloadForNewCode(msg.state)) return;
       let name = useStore.getState().clientName;
       if (!name) {
         name = msg.state.link.via === 'agent' ? 'Garage' : 'Studio';
@@ -181,4 +182,21 @@ export function nextGroupFile(s?: AppState): { id: string; name: string; index: 
 
 export function jobActive(s?: AppState): boolean {
   return !!s && ['loading', 'running', 'paused', 'stopping'].includes(s.job.status);
+}
+
+/**
+ * After an update the server runs newer code than this page. Reload once to pick up the new UI
+ * (once per commit, so a checkout with an unbuilt commit can't loop).
+ */
+function reloadForNewCode(state: AppState): boolean {
+  const served = state.code?.[state.link.via]?.commit;
+  if (!served || !__GCC_COMMIT__ || served === __GCC_COMMIT__) return false;
+  try {
+    if (sessionStorage.getItem('gcc.reloadedFor') === served) return false;
+    sessionStorage.setItem('gcc.reloadedFor', served);
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
 }

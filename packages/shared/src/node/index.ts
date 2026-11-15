@@ -96,3 +96,4 @@ export function parseArgs(argv: string[]): Record<string, string | boolean> {
   }
   return out;
 }
+export * from './code.ts';

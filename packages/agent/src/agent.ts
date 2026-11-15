@@ -8,19 +8,24 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
+  codeState,
   DEFAULT_CONFIG,
   isLibraryCommand,
+  outdatedRefusal,
   PROTOCOL_VERSION,
+  shortCommit,
   type AppState,
+  type CodeState,
   type ClientMessage,
   type Command,
   type JobGroup,
   type LibraryItem,
   type MachineConfig,
   type Macro,
+  type ServerCode,
   type ServerMessage,
 } from '@gcc/shared';
-import { readBody, sendJson, serveStatic, sha256, WEB_DIST } from '@gcc/shared/node';
+import { readBody, readCode, sendJson, serveStatic, sha256, Updater, WEB_DIST, type UpdateStep } from '@gcc/shared/node';
 import { GrblController } from './controller.ts';
 import { HubLink } from './hubLink.ts';
 import { FakeGrbl, type FakeGrblOptions } from './sim/fakeGrbl.ts';
@@ -39,6 +44,12 @@ export interface AgentOptions {
   name?: string;
   webRoot?: string;
   pollMs?: number;
+  /** The code this agent runs (default: read from the git checkout). Tests pass their own. */
+  code?: ServerCode;
+  /** The update steps (default: git pull, npm install, build the web UI). */
+  updateSteps?: UpdateStep[];
+  /** Called after a successful update; main.ts exits so the launcher starts the new code. */
+  onRestart?: () => void;
 }
 
 interface Client {
@@ -57,6 +68,10 @@ export class Agent {
   config: MachineConfig = DEFAULT_CONFIG;
   hubName?: string;
   sim?: FakeGrbl;
+  /** The code this agent runs, and the hub's as it last reported it. */
+  readonly code: ServerCode;
+  hubCode?: ServerCode;
+  readonly updater: Updater;
 
   private server?: Server;
   private wss?: WebSocketServer;
@@ -70,6 +85,8 @@ export class Agent {
     this.name = opts.name ?? `${hostname().replace(/\.local$/, '')} (machine)`;
     this.controller = new GrblController({ simulated: opts.simulate, pollMs: opts.pollMs });
     this.hub = new HubLink({ url: opts.hubUrl, discover: opts.discover });
+    this.code = opts.code ?? readCode();
+    this.updater = new Updater(this.code.repo ?? '.', opts.updateSteps);
     this.cacheDir = join(opts.dataDir, 'files');
     mkdirSync(this.cacheDir, { recursive: true });
     this.loadCachedLibrary();
@@ -157,7 +174,21 @@ export class Agent {
       macros: this.macros,
       config: this.config,
       console: this.controller.console,
+      code: this.codeState(),
     };
+  }
+
+  /** This agent's code with any update in progress. */
+  private get myCode(): ServerCode {
+    return { ...this.code, update: this.updater.progress };
+  }
+
+  codeState(): CodeState {
+    return codeState(this.hubCode, this.myCode, true);
+  }
+
+  private broadcastCode(): void {
+    this.broadcast({ t: 'patch', patch: { code: this.codeState() } });
   }
 
   private broadcast(msg: ServerMessage): void {
@@ -185,7 +216,8 @@ export class Agent {
     });
 
     this.hub.on('open', () => {
-      this.hub.send({ t: 'hello', name: this.name, version: PROTOCOL_VERSION });
+      this.hubCode = undefined; // until this hub says which code it runs
+      this.hub.send({ t: 'hello', name: this.name, version: PROTOCOL_VERSION, code: this.myCode });
       this.hub.send({ t: 'state', machine: c.machine, job: c.job });
       this.hub.send({ t: 'console', lines: c.console.slice(-200) });
       this.controller.log('info', `Connected to hub at ${this.hub.url}`);
@@ -208,6 +240,17 @@ export class Agent {
         this.saveCachedLibrary();
         this.broadcast({ t: 'patch', patch: { library: this.library, folders: this.folders, libraryRoot: this.libraryRoot, macros: this.macros, config: this.config } });
         this.broadcastLink();
+      } else if (msg.t === 'code') {
+        const wasBehind = this.codeState().agentBehind;
+        this.hubCode = msg.code;
+        const now = this.codeState();
+        if (now.agentBehind && !wasBehind) {
+          this.controller.log(
+            'error',
+            `This agent runs older code (${shortCommit(this.code)}) than the hub (${shortCommit(msg.code)}). It won't move the machine until it's updated: use Update now, or run git pull and npm install in ${this.code.repo}, then restart it.`,
+          );
+        }
+        this.broadcastCode();
       } else if (msg.t === 'cmd') {
         void this.execute(msg.cmd, msg.by).then((r) => this.hub.send({ t: 'result', reqId: msg.reqId, ...r }));
       }
@@ -249,7 +292,13 @@ export class Agent {
   async execute(cmd: Command, by: string): Promise<{ ok: boolean; error?: string }> {
     try {
       if (isLibraryCommand(cmd)) return await this.hub.request(cmd, by);
+      const refusal = outdatedRefusal(cmd, this.controller.job, this.codeState());
+      if (refusal) throw new Error(refusal);
       switch (cmd.type) {
+        case 'update':
+          if (cmd.target === 'hub') return await this.hub.request(cmd, by);
+          this.update(by);
+          break;
         case 'start':
           await this.startJob(cmd.fileId, by, cmd.group);
           break;
@@ -274,6 +323,48 @@ export class Agent {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  }
+
+  /** Pull, install and rebuild in the background, then restart. Refused while the machine is busy. */
+  private update(by: string): void {
+    if (!this.code.canUpdate) {
+      throw new Error(`This agent isn't running from a git checkout, so it can't update itself. Update ${this.code.repo} by hand, then restart it`);
+    }
+    if (this.updater.running) throw new Error('The agent is already updating');
+    const job = this.controller.job;
+    if (this.controller.isJobActive || job.status === 'toolchange') {
+      throw new Error('Finish or end the job first: updating restarts the agent');
+    }
+    if (['Run', 'Jog', 'Home', 'Hold'].includes(this.controller.machine.status)) throw new Error('Wait until the machine is idle');
+
+    this.controller.log('info', `Updating the agent (asked by ${by})`);
+    const onProgress = () => {
+      this.hub.send({ t: 'code', code: this.myCode });
+      this.broadcastCode();
+    };
+    const onLog = (line: string) => this.controller.log('info', line);
+    this.updater.on('progress', onProgress);
+    this.updater.on('log', onLog);
+    this.updater
+      .run()
+      .then(() => {
+        this.controller.log('info', 'Agent updated. Restarting…');
+        this.toastAll('info', this.code.supervised ? 'Agent updated. It restarts by itself in a moment' : 'Agent updated. Start it again on the machine Mac (npm run agent)');
+        setTimeout(() => this.opts.onRestart?.(), 1500);
+      })
+      .catch((err) => {
+        this.controller.log('error', (err as Error).message);
+        this.toastAll('error', `Agent update failed: ${(err as Error).message}`);
+      })
+      .finally(() => {
+        this.updater.off('progress', onProgress);
+        this.updater.off('log', onLog);
+      });
+  }
+
+  private toastAll(level: 'info' | 'error', text: string): void {
+    this.broadcast({ t: 'toast', level, text });
+    this.hub.send({ t: 'toast', level, text });
   }
 
   /** The files of a library group, in order. */

@@ -126,6 +126,8 @@ final class Server {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "\(nodeDir):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         env["FORCE_COLOR"] = "0"
+        // Tells the server we start it again after Update now (exit code 75).
+        env["GCC_SUPERVISED"] = "1"
 
         DispatchQueue.global(qos: .userInitiated).async {
             // 1. Dependencies and the web UI, the same steps as the .command launchers.
@@ -164,6 +166,12 @@ final class Server {
                         self.healthTimer?.invalidate()
                         self.process = nil
                         self.stdinPipe = nil
+                        if !self.stopping && proc.terminationStatus == 75 {
+                            // Updated from the UI: start the new code.
+                            self.log("↻ Updated. Restarting the \(role.package)…\n")
+                            self.start(role: role, repo: repo, node: node) { _ in }
+                            return
+                        }
                         if self.stopping || proc.terminationStatus == 0 {
                             self.state = .stopped
                         } else {
