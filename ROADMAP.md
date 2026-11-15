@@ -13,7 +13,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 5 | Web UI: DRO, jog, zero, 3D progress, library, console, overrides, macros | ✅ |
 | 6 | Sync hardening: restart mid-job, multi-browser tests, double-click launchers, setup guide | ✅ |
 | 6b | Mac app launched from Spotlight (hub / agent / simulator roles; quitting stops the server) | ✅ |
-| 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | 🚧 built on `send-to-gcode-controller` branches, waiting to be merged |
+| 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | ✅ merged into main in both apps |
 | 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
 ## Next up
