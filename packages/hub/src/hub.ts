@@ -159,7 +159,10 @@ export class Hub {
     this.sendAgent({ t: 'library', library: s.library, macros: s.macros, config: s.config, hubName: this.name });
   }
 
-  private addConsole(lines: ConsoleLine[]): void {
+  private addConsole(incoming: ConsoleLine[]): void {
+    const recent = new Set(this.console.slice(-300).map((l) => `${l.t}|${l.dir}|${l.text}`));
+    const lines = incoming.filter((l) => !recent.has(`${l.t}|${l.dir}|${l.text}`));
+    if (!lines.length) return;
     this.console.push(...lines);
     if (this.console.length > CONSOLE_MAX) this.console.splice(0, this.console.length - CONSOLE_MAX);
     this.broadcast({ t: 'console', lines });
@@ -328,7 +331,12 @@ export class Hub {
       const body = await readBody(req);
       const header = (k: string) => {
         const v = req.headers[k];
-        return typeof v === 'string' ? decodeURIComponent(v) : undefined;
+        if (typeof v !== 'string') return undefined;
+        try {
+          return decodeURIComponent(v);
+        } catch {
+          return v;
+        }
       };
       try {
         const item = this.library.add(body, {

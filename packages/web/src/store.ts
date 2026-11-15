@@ -1,0 +1,158 @@
+// One WebSocket to whichever server served this page (hub or agent), holding
+// the synced AppState. Every component reads from here and sends commands
+// through `run`.
+
+import { create } from 'zustand';
+import { applyPatch, randomId, type AppState, type Command, type ServerMessage } from '@gcc/shared';
+
+export interface Toast {
+  id: string;
+  level: 'info' | 'warn' | 'error';
+  text: string;
+}
+
+interface Store {
+  state?: AppState;
+  socket: 'connecting' | 'open' | 'closed';
+  clientName: string;
+  toasts: Toast[];
+  /** Library file shown in the visualizer when no job is loaded. */
+  previewId?: string;
+  /** File waiting for the start confirmation. */
+  confirmStartId?: string;
+  settingsOpen: boolean;
+  version: number;
+  run: (cmd: Command) => Promise<boolean>;
+  setClientName: (name: string) => void;
+  toast: (level: Toast['level'], text: string) => void;
+  dismiss: (id: string) => void;
+  setPreview: (id?: string) => void;
+  askStart: (id?: string) => void;
+  setSettingsOpen: (open: boolean) => void;
+}
+
+const NAME_KEY = 'gcc.clientName';
+
+function storedName(): string | undefined {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+let ws: WebSocket | undefined;
+const pending = new Map<string, (r: { ok: boolean; error?: string }) => void>();
+
+export const useStore = create<Store>((set, get) => ({
+  socket: 'connecting',
+  clientName: storedName() ?? '',
+  toasts: [],
+  settingsOpen: false,
+  version: 0,
+
+  run: async (cmd) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      get().toast('error', 'Not connected to the server');
+      return false;
+    }
+    const reqId = randomId();
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      pending.set(reqId, resolve);
+      ws!.send(JSON.stringify({ t: 'cmd', reqId, cmd }));
+      setTimeout(() => {
+        if (pending.delete(reqId)) resolve({ ok: false, error: 'No answer from the server' });
+      }, 35000);
+    });
+    if (!result.ok) get().toast('error', result.error ?? 'Command failed');
+    return result.ok;
+  },
+
+  setClientName: (name) => {
+    try {
+      localStorage.setItem(NAME_KEY, name);
+    } catch {
+      // private mode: keep it for this session only
+    }
+    set({ clientName: name });
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'hello', name }));
+  },
+
+  toast: (level, text) => {
+    const id = randomId();
+    set((s) => ({ toasts: [...s.toasts.slice(-4), { id, level, text }] }));
+    setTimeout(() => get().dismiss(id), level === 'error' ? 9000 : 4500);
+  },
+  dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  setPreview: (id) => set({ previewId: id }),
+  askStart: (id) => set({ confirmStartId: id }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+}));
+
+function onMessage(msg: ServerMessage): void {
+  const { state } = useStore.getState();
+  switch (msg.t) {
+    case 'snapshot': {
+      let name = useStore.getState().clientName;
+      if (!name) {
+        name = msg.state.link.via === 'agent' ? 'Garage' : 'Studio';
+        useStore.setState({ clientName: name });
+      }
+      ws?.send(JSON.stringify({ t: 'hello', name }));
+      useStore.setState((s) => ({ state: msg.state, version: s.version + 1 }));
+      return;
+    }
+    case 'patch':
+      if (!state) return;
+      // Replace the touched top-level slices so React sees new references.
+      useStore.setState((s) => ({ state: applyPatch({ ...state } as Omit<AppState, 'console'>, msg.patch) as AppState, version: s.version + 1 }));
+      return;
+    case 'console':
+      if (!state) return;
+      useStore.setState({ state: { ...state, console: [...state.console, ...msg.lines].slice(-500) } });
+      return;
+    case 'result':
+      pending.get(msg.reqId)?.(msg);
+      pending.delete(msg.reqId);
+      return;
+    case 'toast':
+      useStore.getState().toast(msg.level, msg.text);
+      return;
+  }
+}
+
+let retry = 500;
+export function connect(): void {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const sock = new WebSocket(`${proto}://${location.host}/ws`);
+  ws = sock;
+  useStore.setState({ socket: 'connecting' });
+  sock.onopen = () => {
+    retry = 500;
+    useStore.setState({ socket: 'open' });
+  };
+  sock.onmessage = (e) => {
+    try {
+      onMessage(JSON.parse(e.data));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    useStore.setState({ socket: 'closed' });
+    for (const [, resolve] of pending) resolve({ ok: false, error: 'Connection lost' });
+    pending.clear();
+    setTimeout(connect, retry);
+    retry = Math.min(retry * 1.6, 5000);
+  };
+}
+
+/** Commands that move or control the machine are only possible when the agent is reachable. */
+export function machineReady(s?: AppState): boolean {
+  return !!s && s.link.agentConnected && s.machine.connection === 'connected';
+}
+
+export function jobActive(s?: AppState): boolean {
+  return !!s && ['loading', 'running', 'paused', 'stopping'].includes(s.job.status);
+}

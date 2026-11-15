@@ -10,6 +10,8 @@ GRBL 1.1, grblHAL or FluidNC machine that talks the standard serial protocol.
 > stock, and never leave a running machine unattended. Provided under the MIT License **without
 > warranty of any kind**.
 
+![A job running on the simulator, viewed from the machine-side browser](docs/screenshot-running.jpg)
+
 ## How it fits together
 
 ```
