@@ -28,7 +28,18 @@ const hub = new Hub({
   name: typeof args.name === 'string' ? args.name : undefined,
 });
 
-const port = await hub.start();
+let port: number;
+try {
+  port = await hub.start();
+} catch (err) {
+  const e = err as NodeJS.ErrnoException;
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Port ${(e as { port?: number }).port ?? '8080'} is already in use. Is the hub already running (in another window or the app)?`);
+  } else {
+    console.error(`Could not start the hub: ${e.message}`);
+  }
+  process.exit(1);
+}
 const lan = Object.values(networkInterfaces())
   .flat()
   .filter((i) => i && i.family === 'IPv4' && !i.internal)
@@ -46,3 +57,11 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// Launched by the Mac app: exit when the app goes away, even if it was force-quit,
+// so no orphaned server keeps the port (or the USB connection) open.
+if (args['exit-with-parent']) {
+  process.stdin.on('end', shutdown);
+  process.stdin.on('close', shutdown);
+  process.stdin.resume();
+}

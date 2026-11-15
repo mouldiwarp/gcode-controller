@@ -35,7 +35,7 @@ The hub prints its addresses, for example:
            http://192.168.1.20:8080
 ```
 
-Or double-click **`Start Hub.command`** in the project folder. It opens a Terminal window and the UI. Close the window to stop the hub.
+Or run `scripts/build-mac-app.sh` once and launch **GCode Controller** from Spotlight (choose **Hub** the first time and allow local network access). See the README's Mac app section. Or double-click **`Start Hub.command`** in the project folder. It opens a Terminal window and the UI. Close the window to stop the hub.
 
 ## 3. Garage Mac: run the agent
 
@@ -73,7 +73,7 @@ Add `--sim-speed 5` to make simulated jobs run five times faster.
 
    If more than one port is marked, choose one with `--serial /dev/cu.wchusbserial110` (use your port's name).
 
-Or double-click **`Start Agent.command`** (or **`Start Agent (Simulator).command`** while testing). Close its Terminal window to stop the agent.
+Or run `scripts/build-mac-app.sh` on this Mac too (it compiles for Intel here) and launch **GCode Controller** from Spotlight, choosing **Agent** or **Agent with simulator**. Click **Allow** when macOS asks about local network access. Or double-click **`Start Agent.command`** (or **`Start Agent (Simulator).command`** while testing). Close its Terminal window to stop the agent.
 
 ## 4. Open the UI
 

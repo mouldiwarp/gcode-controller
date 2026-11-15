@@ -84,7 +84,10 @@ export class Agent {
       if (new URL(req.url ?? '/', 'http://x').pathname !== '/ws') return socket.destroy();
       this.wss!.handleUpgrade(req, socket, head, (ws) => this.onClient(ws));
     });
-    await new Promise<void>((resolve) => this.server!.listen(this.opts.port, this.opts.host ?? '0.0.0.0', resolve));
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', reject);
+      this.server!.listen(this.opts.port, this.opts.host ?? '0.0.0.0', resolve);
+    });
     const addr = this.server.address();
     const port = typeof addr === 'object' && addr ? addr.port : this.opts.port;
     this.hub.start();

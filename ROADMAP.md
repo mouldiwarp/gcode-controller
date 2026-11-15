@@ -12,6 +12,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 4 | Hub: library, upload API, inbox, Bonjour, sync | ✅ |
 | 5 | Web UI: DRO, jog, zero, 3D progress, library, console, overrides, macros | ✅ |
 | 6 | Sync hardening: restart mid-job, multi-browser tests, double-click launchers, setup guide | ✅ |
+| 6b | Mac app launched from Spotlight (hub / agent / simulator roles; quitting stops the server) | ✅ |
 | 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | 🚧 built on `send-to-gcode-controller` branches, waiting to be merged |
 | 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
@@ -60,4 +61,5 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
   integration tests and were checked by hand in Chrome.
 - ⬜ Package the hub and agent as a single download (Node runtime included), so the garage Mac doesn't
   need Node installed.
+- ⬜ Show machine and job status in the Mac app's window and Dock icon (progress badge, alarm colour).
 - 💡 Bonjour discovery in the Swift apps, if the hub ever moves off the design Mac.

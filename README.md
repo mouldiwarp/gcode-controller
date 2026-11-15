@@ -73,9 +73,36 @@ yourself, pass `--hub http://design-mac.local:8080`.
 See **[docs/SETUP.md](docs/SETUP.md)** for the full two-Mac walkthrough, including testing the sync with the
 simulator before the machine arrives.
 
+### The Mac app (launch from Spotlight)
+
+Build it once on each Mac:
+
+```sh
+scripts/build-mac-app.sh
+```
+
+This compiles **GCode Controller.app** for that Mac and installs it in `~/Applications`, where Spotlight
+finds it. Press ⌘Space and type "GCode". It needs the Command Line Tools (`xcode-select --install`),
+which git already uses, and Node 22.
+
+- **First launch** asks what the Mac does: **Hub**, **Agent**, or **Agent with simulator**. Change it later
+  from the **Server** menu.
+- **Launching** builds the web UI if it's out of date, starts the server and opens the controller in your browser.
+  The app window shows status, the address, **Open in Browser**, **Restart** and the server log.
+- **Quitting** (⌘Q) stops the server. On the agent, it warns you first if a job is running. Even a force quit
+  stops the server, so the USB port is never left open.
+- **Closing the window** keeps the server running. Click the Dock icon to bring the window back.
+- **Local network prompt:** the first time it runs, macOS asks to let GCode Controller find devices on local
+  networks. Click **Allow**, or the agent can't reach the hub. To change it later, go to System Settings ▸ Privacy &
+  Security ▸ Local Network.
+- The app runs the code in this checkout. After a `git pull`, just relaunch. If you move the folder, use
+  **Server ▸ Choose Folder…**. Rerun the build script only when `mac/` changes.
+
+Nothing starts at login.
+
 ### Launching by double-click
 
-Nothing starts automatically. To launch from Finder, double-click:
+To launch without the app, double-click:
 
 - **`Start Hub.command`** on the design Mac
 - **`Start Agent.command`** on the machine Mac, or **`Start Agent (Simulator).command`** to test without the machine

@@ -44,7 +44,18 @@ const agent = new Agent({
   name: typeof args.name === 'string' ? args.name : undefined,
 });
 
-const port = await agent.start();
+let port: number;
+try {
+  port = await agent.start();
+} catch (err) {
+  const e = err as NodeJS.ErrnoException;
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Port ${(e as { port?: number }).port ?? '8081'} is already in use. Is the agent already running (in another window or the app)?`);
+  } else {
+    console.error(`Could not start the agent: ${e.message}`);
+  }
+  process.exit(1);
+}
 console.log(`GCode Controller agent "${agent.name}"`);
 console.log(`  UI:      http://localhost:${port}`);
 console.log(`  Machine: ${args.simulate ? 'GRBL simulator' : 'USB (auto-detect)'}`);
@@ -60,3 +71,11 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// Launched by the Mac app: exit when the app goes away, even if it was force-quit,
+// so no orphaned server keeps the port (or the USB connection) open.
+if (args['exit-with-parent']) {
+  process.stdin.on('end', shutdown);
+  process.stdin.on('close', shutdown);
+  process.stdin.resume();
+}

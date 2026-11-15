@@ -83,7 +83,10 @@ export class Hub {
       else if (path === '/agent') this.agentWss!.handleUpgrade(req, socket, head, (ws) => this.onAgent(ws));
       else socket.destroy();
     });
-    await new Promise<void>((resolve) => this.server!.listen(this.opts.port ?? DEFAULT_HUB_PORT, this.opts.host ?? '0.0.0.0', resolve));
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', reject);
+      this.server!.listen(this.opts.port ?? DEFAULT_HUB_PORT, this.opts.host ?? '0.0.0.0', resolve);
+    });
     const addr = this.server.address();
     this.port = typeof addr === 'object' && addr ? addr.port : 0;
 
