@@ -175,8 +175,9 @@ export type HubToAgent =
   | { t: 'result'; reqId: string; ok: boolean; error?: string };
 
 export const DEFAULT_CONFIG: MachineConfig = {
-  // FoxAlien XE-Ultra: roughly 800 x 840 x 120 mm of travel, homing to the positive corner (GRBL default).
-  envelope: { min: [-800, -840, -120], max: [0, 0, 0] },
+  // FoxAlien XE-Pro Ultra (as in Swarf's machine profile): 800 x 800 mm, about 120 mm of Z,
+  // homing to the positive corner (GRBL default). Adjust in Settings or read $130-$132.
+  envelope: { min: [-800, -800, -120], max: [0, 0, 0] },
   safeZ: 5,
   jogSteps: [0.1, 1, 10, 50],
   jogFeedXY: 3000,

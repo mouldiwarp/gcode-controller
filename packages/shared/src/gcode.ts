@@ -78,6 +78,12 @@ const PLANE_AXES: Record<Plane, [number, number, number]> = {
 /** Incremental modal interpreter: feed it lines, it returns the segments each one moves. */
 export class Interpreter {
   pos: Vec3 = [0, 0, 0];
+  /**
+   * Which axes have a known position. A program doesn't say where the machine
+   * starts, so moves are only drawn once every axis has been set; until then
+   * they just establish the position (no bogus line from 0,0,0).
+   */
+  known: [boolean, boolean, boolean] = [false, false, false];
   motion = 0; // 0,1,2,3
   absolute = true;
   inches = false;
@@ -93,8 +99,15 @@ export class Interpreter {
     this.arcTolerance = opts.arcTolerance ?? 0.02;
   }
 
+  /** Start from a known position (the simulator knows where the machine is). */
+  setPosition(p: Vec3): void {
+    this.pos = [...p] as Vec3;
+    this.known = [true, true, true];
+  }
+
   reset(): void {
     this.pos = [0, 0, 0];
+    this.known = [false, false, false];
     this.motion = 0;
     this.absolute = true;
     this.inches = false;
@@ -165,10 +178,16 @@ export class Interpreter {
     const from: Vec3 = [...this.pos] as Vec3;
     const to: Vec3 = [...this.pos] as Vec3;
     const vals = [axis.X, axis.Y, axis.Z];
+    const startKnown = this.known[0] && this.known[1] && this.known[2];
     for (let i = 0; i < 3; i++) {
       const v = vals[i];
       if (v === undefined) continue;
       to[i] = this.absolute ? v * scale : from[i] + v * scale;
+      if (this.absolute) this.known[i] = true;
+    }
+    if (!startKnown) {
+      this.pos = to;
+      return [];
     }
 
     let segments: Segment[];

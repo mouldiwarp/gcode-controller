@@ -82,7 +82,7 @@ export class FakeGrbl implements Transport {
       plannerSize: opts.plannerSize ?? 15,
       homingRequired: opts.homingRequired ?? true,
       softLimits: opts.softLimits ?? false,
-      travel: opts.travel ?? [800, 840, 120],
+      travel: opts.travel ?? [800, 800, 120],
       rapidRate: opts.rapidRate ?? 5000,
       tickMs: opts.tickMs ?? 10,
       bootDelayMs: opts.bootDelayMs ?? 50,
@@ -491,7 +491,7 @@ export class FakeGrbl implements Transport {
 
     // Normal motion, interpreted in work coordinates.
     const end = this.plannedEnd();
-    this.interp.pos = [end[0] - this.wco[0], end[1] - this.wco[1], end[2] - this.wco[2]];
+    this.interp.setPosition([end[0] - this.wco[0], end[1] - this.wco[1], end[2] - this.wco[2]]);
     const motionBefore = this.interp.motion;
     const segs = this.interp.step(line);
     if (!segs.length) return this.send('ok');

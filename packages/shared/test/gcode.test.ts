@@ -11,8 +11,16 @@ describe('cleanLine', () => {
 });
 
 describe('Interpreter', () => {
+  it('draws nothing until the start position is known', () => {
+    const it = new Interpreter();
+    expect(it.step('G0Z5')).toEqual([]);
+    expect(it.step('G0X1Y2')).toEqual([]);
+    expect(it.step('G0X3')[0]).toMatchObject({ type: 'rapid', from: [1, 2, 5], to: [3, 2, 5] });
+  });
+
   it('tracks modal motion, absolute and incremental moves', () => {
     const it = new Interpreter();
+    it.setPosition([0, 0, 0]);
     expect(it.step('G0X10Y10')[0]).toMatchObject({ type: 'rapid', to: [10, 10, 0] });
     expect(it.step('G1Z-2F300')[0]).toMatchObject({ type: 'feed', to: [10, 10, -2], feed: 300 });
     expect(it.step('X20')[0]).toMatchObject({ type: 'feed', to: [20, 10, -2] });
@@ -22,6 +30,7 @@ describe('Interpreter', () => {
 
   it('converts inches', () => {
     const it = new Interpreter();
+    it.setPosition([0, 0, 0]);
     it.step('G20');
     expect(it.step('G1X1F10')[0]).toMatchObject({ to: [25.4, 0, 0], feed: 254 });
   });
@@ -36,6 +45,7 @@ describe('Interpreter', () => {
 
   it('linearises a full IJK circle that returns to its start', () => {
     const it = new Interpreter({ arcTolerance: 0.01 });
+    it.setPosition([0, 0, 0]);
     it.step('G0X10Y0');
     const segs = it.step('G2X10Y0I-10J0F500');
     expect(segs.length).toBeGreaterThan(20);
@@ -50,6 +60,7 @@ describe('Interpreter', () => {
 
   it('computes R-form arc centres like GRBL', () => {
     const it = new Interpreter();
+    it.setPosition([0, 0, 0]);
     // Quarter circle CCW from (10,0) to (0,10), radius 10 about the origin.
     const segs = it.step('G0X10Y0') && it.step('G3X0Y10R10F100');
     for (const s of segs) expect(Math.hypot(s.to[0], s.to[1])).toBeCloseTo(10, 5);
