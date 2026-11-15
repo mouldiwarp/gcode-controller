@@ -5,6 +5,7 @@ const AXES = ['X', 'Y', 'Z'] as const;
 export function DroPanel() {
   const s = useStore((x) => x.state)!;
   const run = useStore((x) => x.run);
+  const setProbeOpen = useStore((x) => x.setProbeOpen);
   const ready = machineReady(s);
   const locked = !ready || jobActive(s) || s.machine.status !== 'Idle';
   const m = s.machine;
@@ -42,7 +43,7 @@ export function DroPanel() {
           Zero all
         </button>
       </div>
-      <div className="grid-2" style={{ marginTop: 8 }}>
+      <div className="grid-3" style={{ marginTop: 8 }}>
         <button
           className="btn"
           disabled={locked}
@@ -53,6 +54,14 @@ export function DroPanel() {
         </button>
         <button className="btn" disabled={locked} onClick={() => run({ type: 'goToZero', axes: ['Z'] })} title="Move down to Z0">
           Go to Z0
+        </button>
+        <button
+          className="btn outline-gold"
+          disabled={!ready || jobActive(s) || m.status === 'Alarm'}
+          onClick={() => setProbeOpen(true)}
+          title="Set work Z with the touch plate"
+        >
+          Probe Z
         </button>
       </div>
     </section>

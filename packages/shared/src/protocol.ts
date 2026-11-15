@@ -30,9 +30,30 @@ export interface MachineState {
   /** Raw `[GC:...]` modal state. */
   modal?: string;
   settings?: Record<string, string>;
+  /** A Z probe cycle is running. */
+  probing?: boolean;
+  /** Result of the most recent Z probe. */
+  lastProbe?: ProbeResult;
 }
 
-export type JobStatus = 'idle' | 'loading' | 'running' | 'paused' | 'stopping' | 'done' | 'stopped' | 'error';
+export interface ProbeResult {
+  ok: boolean;
+  message: string;
+  t: number;
+  /** Machine Z where the bit touched the plate. */
+  contactZ?: number;
+}
+
+/** `toolchange`: one file of a group has finished and the next is waiting for a bit change. */
+export type JobStatus = 'idle' | 'loading' | 'running' | 'paused' | 'stopping' | 'toolchange' | 'done' | 'stopped' | 'error';
+
+/** A run of several library files in order (one per tool, or side A / side B). */
+export interface JobGroup {
+  name: string;
+  files: { id: string; name: string }[];
+  /** Index in `files` of the file this job state is about. */
+  index: number;
+}
 
 export interface JobState {
   status: JobStatus;
@@ -52,6 +73,7 @@ export interface JobState {
   startedBy?: string;
   estSeconds?: number;
   error?: string;
+  group?: JobGroup;
 }
 
 export interface LibraryItem {
@@ -85,6 +107,20 @@ export interface MachineConfig {
   jogFeedXY: number;
   jogFeedZ: number;
   rapidRate: number;
+  probe: ProbeConfig;
+}
+
+export interface ProbeConfig {
+  /** Touch plate thickness, mm. 0 means not set yet: probing is refused until it is measured. */
+  plateThickness: number;
+  /** How far down to search before giving up, mm. */
+  maxTravel: number;
+  /** First, fast touch, mm/min. */
+  seekFeed: number;
+  /** Second, slow touch that sets zero, mm/min. */
+  latchFeed: number;
+  /** Lift above the plate when done, mm. */
+  retract: number;
 }
 
 export interface LinkState {
@@ -130,7 +166,9 @@ export type Command =
   | { type: 'goToZero'; axes: ('X' | 'Y' | 'Z')[] }
   | { type: 'mdi'; line: string }
   | { type: 'runMacro'; id: string }
-  | { type: 'start'; fileId: string }
+  | { type: 'start'; fileId: string; /** Run the rest of the file's group after it. */ group?: boolean }
+  | { type: 'startNext' }
+  | { type: 'probeZ' }
   | { type: 'stop' }
   | { type: 'override'; kind: OverrideKind; action: 'reset' | 'plus10' | 'minus10' | 'plus1' | 'minus1' | 'r50' | 'r25' }
   | { type: 'refreshSettings' }
@@ -183,6 +221,7 @@ export const DEFAULT_CONFIG: MachineConfig = {
   jogFeedXY: 3000,
   jogFeedZ: 1000,
   rapidRate: 5000,
+  probe: { plateThickness: 0, maxTravel: 25, seekFeed: 150, latchFeed: 25, retract: 5 },
 };
 
 export function initialMachine(simulated = false): MachineState {
@@ -219,5 +258,6 @@ export function jobElapsedSeconds(job: JobState, now = Date.now()): number {
 export function jobPercent(job: JobState): number {
   if (!job.totalLines) return 0;
   if (job.status === 'done') return 100;
+  if (job.status === 'toolchange') return 100;
   return Math.min(100, (job.ackedLines / job.totalLines) * 100);
 }

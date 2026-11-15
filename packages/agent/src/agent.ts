@@ -14,6 +14,7 @@ import {
   type AppState,
   type ClientMessage,
   type Command,
+  type JobGroup,
   type LibraryItem,
   type MachineConfig,
   type Macro,
@@ -218,7 +219,7 @@ export class Agent {
       const data = JSON.parse(readFileSync(file, 'utf8'));
       this.library = data.library ?? [];
       this.macros = data.macros ?? [];
-      this.config = { ...DEFAULT_CONFIG, ...(data.config ?? {}) };
+      this.config = { ...DEFAULT_CONFIG, ...(data.config ?? {}), probe: { ...DEFAULT_CONFIG.probe, ...data.config?.probe } };
       this.hubName = data.hubName;
       this.controller.macros = this.macros;
       this.controller.config = this.config;
@@ -239,7 +240,10 @@ export class Agent {
       if (isLibraryCommand(cmd)) return await this.hub.request(cmd, by);
       switch (cmd.type) {
         case 'start':
-          await this.startJob(cmd.fileId, by);
+          await this.startJob(cmd.fileId, by, cmd.group);
+          break;
+        case 'startNext':
+          await this.startNext(by);
           break;
         case 'connect':
           this.autoConnect = true;
@@ -261,26 +265,71 @@ export class Agent {
     }
   }
 
-  private async startJob(fileId: string, by: string): Promise<void> {
+  /** The files of a library group, in order. */
+  groupFiles(name: string): LibraryItem[] {
+    return this.library.filter((f) => f.group === name).sort((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
+  }
+
+  private async startJob(fileId: string, by: string, runGroup = false): Promise<void> {
+    if (this.controller.job.status === 'toolchange') {
+      throw new Error('A group is waiting for a bit change. Use Start next, or End group first');
+    }
     this.controller.checkCanStart();
     const item = this.library.find((f) => f.id === fileId);
     if (!item) throw new Error('That file is not in the library');
+    let group: JobGroup | undefined;
+    let prefetch: LibraryItem[] = [item];
+    if (runGroup && item.group) {
+      const all = this.groupFiles(item.group);
+      const index = all.findIndex((f) => f.id === item.id);
+      if (index < all.length - 1) {
+        group = { name: item.group, files: all.map((f) => ({ id: f.id, name: f.name })), index };
+        prefetch = all.slice(index);
+      }
+    }
+    await this.load(item, prefetch, by, group);
+  }
+
+  /** After a bit change: start the next file of the group. */
+  private async startNext(by: string): Promise<void> {
+    const job = this.controller.job;
+    const g = job.group;
+    if (job.status !== 'toolchange' || !g) throw new Error('No group is waiting for the next file');
+    this.controller.checkCanStart();
+    const next = g.files[g.index + 1];
+    const item = this.library.find((f) => f.id === next.id);
+    if (!item) throw new Error(`${next.name} is no longer in the library`);
+    await this.load(item, [item], by, { ...g, index: g.index + 1 });
+  }
+
+  /**
+   * Fetch every file the run needs (a whole group up front, so a Wi-Fi dropout
+   * between files can't strand it), then start streaming the first.
+   */
+  private async load(item: LibraryItem, prefetch: LibraryItem[], by: string, group?: JobGroup): Promise<void> {
+    const previous = this.controller.job;
     this.controller.markLoading(item.id, item.name, by);
-    let text: string;
+    let text = '';
     try {
-      text = await this.fileContent(item);
+      for (const f of prefetch) {
+        const content = await this.fileContent(f);
+        if (f.id === item.id) text = content;
+      }
     } catch (err) {
-      this.controller.cancelLoading((err as Error).message);
+      // Going back to the tool-change state keeps the group recoverable.
+      if (previous.status === 'toolchange') this.controller.restoreJob(previous);
+      else this.controller.cancelLoading((err as Error).message);
       throw err;
     }
     // The machine could have changed state while the file downloaded.
     try {
       this.controller.checkCanStart({ loading: true });
     } catch (err) {
-      this.controller.cancelLoading((err as Error).message);
+      if (previous.status === 'toolchange') this.controller.restoreJob(previous);
+      else this.controller.cancelLoading((err as Error).message);
       throw err;
     }
-    this.controller.startJob(text, { fileId: item.id, fileName: item.name, by, estSeconds: item.estSeconds });
+    this.controller.startJob(text, { fileId: item.id, fileName: item.name, by, estSeconds: item.estSeconds, group });
   }
 
   /** Read a file from the local cache, or download it from the hub and verify it. */

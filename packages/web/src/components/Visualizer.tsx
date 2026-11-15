@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyzeProgram, formatDuration, streamableLines, type Bounds, type ProgramAnalysis } from '@gcc/shared';
-import { useStore } from '../store.ts';
+import { useStore, nextGroupFile } from '../store.ts';
 import { ToolpathScene, type ViewName } from '../viz/scene.ts';
 
 interface Loaded {
@@ -38,8 +38,10 @@ export function Visualizer() {
   const [view, setView] = useState<ViewName>('iso');
 
   const job = s.job;
-  const showingJob = job.status !== 'idle' && !!job.fileId;
-  const fileId = showingJob ? job.fileId : previewId;
+  // Between the files of a group, show the next file waiting to run.
+  const next = nextGroupFile(s);
+  const showingJob = job.status !== 'idle' && !next && !!job.fileId;
+  const fileId = next ? next.id : showingJob ? job.fileId : previewId;
   const item = s.library.find((f) => f.id === fileId);
 
   useEffect(() => {

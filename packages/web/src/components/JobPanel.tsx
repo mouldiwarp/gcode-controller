@@ -1,18 +1,21 @@
 import type { OverrideKind } from '@gcc/shared';
-import { jobActive, machineReady, useStore } from '../store.ts';
+import { jobActive, machineReady, nextGroupFile, useStore } from '../store.ts';
 
 export function JobPanel() {
   const s = useStore((x) => x.state)!;
   const run = useStore((x) => x.run);
   const previewId = useStore((x) => x.previewId);
   const askStart = useStore((x) => x.askStart);
+  const askStartNext = useStore((x) => x.askStartNext);
+  const setProbeOpen = useStore((x) => x.setProbeOpen);
+  const next = nextGroupFile(s);
   const ready = machineReady(s);
   const job = s.job;
   const active = jobActive(s);
   const selected = s.library.find((f) => f.id === previewId);
   const ov = s.machine.overrides;
 
-  const canStart = ready && !active && s.machine.status === 'Idle' && !!selected;
+  const canStart = ready && !active && !next && s.machine.status === 'Idle' && !!selected;
   const startHint = !ready
     ? 'Machine not connected'
     : active
@@ -35,11 +38,37 @@ export function JobPanel() {
       </h3>
 
       <div className="job-file">
-        <div className="eyebrow">{active ? 'Running' : 'Selected'}</div>
-        <div className="name">{active ? job.fileName : (selected?.name ?? '—')}</div>
+        <div className="eyebrow">{next ? `Next · file ${next.index + 1} of ${next.total}` : active ? 'Running' : 'Selected'}</div>
+        <div className="name">{next ? next.name : active ? job.fileName : (selected?.name ?? '—')}</div>
+        {active && job.group && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            {job.group.name} · file {job.group.index + 1} of {job.group.files.length}
+          </div>
+        )}
       </div>
 
-      {!active ? (
+      {next ? (
+        <div className="toolchange">
+          <ol className="steps">
+            <li>The spindle is off. Fit the bit for this file.</li>
+            <li>
+              Re-probe Z on the same surface as before.
+              <button className="btn small outline-gold" disabled={!ready || s.machine.status !== 'Idle'} onClick={() => setProbeOpen(true)}>
+                Probe Z
+              </button>
+            </li>
+            <li>Start the next file.</li>
+          </ol>
+          <div className="grid-2">
+            <button className="btn primary big" disabled={!ready || s.machine.status !== 'Idle'} onClick={() => askStartNext(true)}>
+              ▶ Start next
+            </button>
+            <button className="btn big" onClick={() => run({ type: 'clearJob' })} title="Stop here and skip the remaining files">
+              End group
+            </button>
+          </div>
+        </div>
+      ) : !active ? (
         <button className="btn primary big" style={{ width: '100%' }} disabled={!canStart} onClick={() => askStart(selected!.id)} title={startHint}>
           ▶ Start job
         </button>
@@ -59,7 +88,7 @@ export function JobPanel() {
           </button>
         </div>
       )}
-      {startHint && !active && <div className="muted" style={{ fontSize: 12, marginTop: 6, textAlign: 'center' }}>{startHint}</div>}
+      {startHint && !active && !next && <div className="muted" style={{ fontSize: 12, marginTop: 6, textAlign: 'center' }}>{startHint}</div>}
 
       <div className="eyebrow" style={{ marginTop: 16 }}>
         Overrides

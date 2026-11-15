@@ -130,6 +130,54 @@ describe('hub ↔ agent sync', () => {
     }
   });
 
+  it('runs a Swarf group in order, waiting for a bit change between files', async () => {
+    const { hubPort, agent, studio, garage } = await setup(400);
+    const ids: string[] = [];
+    for (const [i, name] of ['1-roughing.nc', '2-finishing.nc', '3-profile.nc'].entries()) {
+      const { body } = await upload(hubPort, name, program(40), { 'X-Source': 'Swarf', 'X-Group': 'Body', 'X-Group-Index': String(i) });
+      ids.push(body.id);
+    }
+    await until(() => garage.state!.library.length === 3, 3000, 'library');
+    expect(await studio.cmd({ type: 'saveConfig', config: { probe: { ...studio.state!.config.probe, plateThickness: 15 } } })).toMatchObject({ ok: true });
+
+    expect(await studio.cmd({ type: 'start', fileId: ids[0], group: true })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'toolchange', 15000, 'first tool change');
+    expect(studio.state!.job.group).toMatchObject({ name: 'Body', index: 0 });
+    expect(studio.state!.job.group!.files.map((f) => f.name)).toEqual(['1-roughing.nc', '2-finishing.nc', '3-profile.nc']);
+    await until(() => agent.sim!.received.at(-1) === 'M5', 2000, 'spindle off');
+
+    // A different file can't start in the middle of a group.
+    expect(await garage.cmd({ type: 'start', fileId: ids[0] })).toMatchObject({ ok: false, error: expect.stringMatching(/bit change/) });
+    // Jogging and probing work during the change.
+    expect(await garage.cmd({ type: 'jog', z: 5, feed: 1000 })).toMatchObject({ ok: true });
+    await until(() => garage.state!.machine.status === 'Idle', 3000, 'jog done');
+    agent.sim!.opts.probeSurfaceZ = garage.state!.machine.mpos[2] - 10;
+    expect(await garage.cmd({ type: 'probeZ' })).toMatchObject({ ok: true });
+
+    expect(await garage.cmd({ type: 'startNext' })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'toolchange' && studio.state!.job.group!.index === 1, 15000, 'second tool change');
+    expect(await studio.cmd({ type: 'startNext' })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'done', 15000, 'group done');
+    expect(studio.state!.job).toMatchObject({ fileName: '3-profile.nc', group: { index: 2 } });
+    expect(await studio.cmd({ type: 'startNext' })).toMatchObject({ ok: false });
+  });
+
+  it('ends a group early with clearJob', async () => {
+    const { hubPort, studio } = await setup(400);
+    const ids: string[] = [];
+    for (const i of [0, 1]) ids.push((await upload(hubPort, `side-${i}.nc`, program(20), { 'X-Group': 'Sides', 'X-Group-Index': String(i) })).body.id);
+    await until(() => studio.state!.library.length === 2, 3000, 'library');
+    // Without group: true only the one file runs.
+    expect(await studio.cmd({ type: 'start', fileId: ids[0] })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'done', 15000, 'single done');
+    expect(studio.state!.job.group).toBeUndefined();
+    expect(await studio.cmd({ type: 'start', fileId: ids[0], group: true })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'toolchange', 15000, 'tool change');
+    expect(await studio.cmd({ type: 'clearJob' })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'idle', 2000, 'cleared');
+    expect(await studio.cmd({ type: 'start', fileId: ids[1] })).toMatchObject({ ok: true });
+  });
+
   it('lets the garage start, the studio pause, and the garage resume', async () => {
     const { hubPort, studio, garage } = await setup(3);
     const { body } = await upload(hubPort, 'slow.nc', program(400));

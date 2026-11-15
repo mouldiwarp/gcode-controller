@@ -33,7 +33,8 @@ export class LibraryStore {
     mkdirSync(this.filesDir, { recursive: true });
     this.items = this.read('library.json', []);
     this.macros = this.read('macros.json', DEFAULT_MACROS);
-    this.config = { ...DEFAULT_CONFIG, ...this.read<Partial<MachineConfig>>('config.json', {}) };
+    const saved = this.read<Partial<MachineConfig>>('config.json', {});
+    this.config = { ...DEFAULT_CONFIG, ...saved, probe: { ...DEFAULT_CONFIG.probe, ...saved.probe } };
     // Drop entries whose file has gone missing.
     this.items = this.items.filter((i) => existsSync(this.path(i.id)));
   }
@@ -130,7 +131,7 @@ export class LibraryStore {
   }
 
   saveConfig(patch: Partial<MachineConfig>): void {
-    this.config = { ...this.config, ...patch };
+    this.config = { ...this.config, ...patch, probe: { ...this.config.probe, ...patch.probe } };
     this.write('config.json', this.config);
   }
 

@@ -25,6 +25,11 @@ export interface FakeGrblOptions {
   tickMs?: number;
   /** Delay before the welcome banner, ms (real time). */
   bootDelayMs?: number;
+  /**
+   * Machine Z of the touch plate's top surface under the bit (the probe input
+   * closes when the bit reaches it). null means no plate: probes find nothing.
+   */
+  probeSurfaceZ?: number | null;
 }
 
 interface Block {
@@ -33,6 +38,8 @@ interface Block {
   feed: number;
   rapid: boolean;
   jog: boolean;
+  /** A probe move: report the result when it completes. */
+  probe?: { contact: boolean; alarmOnMiss: boolean };
 }
 
 type SimState = 'Idle' | 'Run' | 'Hold' | 'Jog' | 'Alarm' | 'Home' | 'Check';
@@ -72,6 +79,7 @@ export class FakeGrbl implements Transport {
   private lastWco = '';
   private lastOv = '';
   private homingRemaining = 0;
+  private probing = false;
   private pendingOkAfterHome = false;
   readonly settings: Record<number, number>;
 
@@ -86,6 +94,7 @@ export class FakeGrbl implements Transport {
       rapidRate: opts.rapidRate ?? 5000,
       tickMs: opts.tickMs ?? 10,
       bootDelayMs: opts.bootDelayMs ?? 50,
+      probeSurfaceZ: opts.probeSurfaceZ === undefined ? -60 : opts.probeSurfaceZ,
     };
     this.interp = new Interpreter({ rapidRate: this.opts.rapidRate });
     this.settings = {
@@ -250,6 +259,7 @@ export class FakeGrbl implements Transport {
     this.holdComplete = false;
     this.pendingOkAfterHome = false;
     this.homingRemaining = 0;
+    this.probing = false;
     if (moving) {
       this.state = 'Alarm';
       this.send('ALARM:3');
@@ -270,6 +280,7 @@ export class FakeGrbl implements Transport {
     const feed = block && (this.state === 'Run' || this.state === 'Jog') ? this.effectiveFeed(block) : 0;
     const speed = this.spindleOn ? Math.round((this.spindleSpeed * this.spindleOv) / 100) : 0;
     let s = `<${state}|MPos:${p}|Bf:${this.opts.plannerSize - this.planner.length},${this.opts.rxSize - this.rx.length}|FS:${Math.round(feed)},${speed}`;
+    if (this.probeTouching()) s += '|Pn:P';
     const wco = this.wco.map(f).join(',');
     const ov = `${this.feedOv},${this.rapidOv},${this.spindleOv}`;
     this.reportCount++;
@@ -281,6 +292,12 @@ export class FakeGrbl implements Transport {
       this.lastOv = ov;
     }
     this.send(s + '>');
+  }
+
+  /** The probe input: closed while the bit rests on the plate. */
+  probeTouching(): boolean {
+    const surface = this.opts.probeSurfaceZ;
+    return surface !== null && this.mpos[2] <= surface + 1e-6;
   }
 
   private effectiveFeed(b: Block): number {
@@ -328,14 +345,32 @@ export class FakeGrbl implements Transport {
         }
       }
       remaining = travel / mmPerSec;
-      if (!b.points.length) this.planner.shift();
+      if (!b.points.length) {
+        this.planner.shift();
+        if (b.probe) this.finishProbe(b.probe);
+      }
       if (travel <= 0) break;
     }
     if (!this.planner.length) this.state = 'Idle';
   }
 
+  private finishProbe(p: NonNullable<Block['probe']>): void {
+    this.probing = false;
+    const prb = this.mpos.map((v) => v.toFixed(3)).join(',');
+    if (!p.contact && p.alarmOnMiss) {
+      this.planner = [];
+      this.state = 'Alarm';
+      this.send('ALARM:5');
+      return;
+    }
+    this.send(`[PRB:${prb}:${p.contact ? 1 : 0}]`);
+    this.send('ok');
+  }
+
   private processRx(): void {
     while (this.isOpen) {
+      // GRBL's parser blocks until a probe cycle finishes.
+      if (this.probing) return;
       const nl = this.rx.indexOf('\n');
       if (nl < 0) return;
       const raw = this.rx.slice(0, nl).replace(/\r$/, '');
@@ -357,7 +392,7 @@ export class FakeGrbl implements Transport {
   private needsSync(line: string): boolean {
     if (line.startsWith('$J=')) return false;
     if (line.startsWith('$')) return true;
-    return /G10|G92|G28|G30|M0?[0125](?!\d)|M30/.test(line);
+    return /G10|G92|G28|G30|G38|G0?4(?![\d.])|M0?[0125](?!\d)|M30/.test(line);
   }
 
   private execute(line: string): void {
@@ -489,6 +524,9 @@ export class FakeGrbl implements Transport {
       return this.plan([target], gs.includes(1) ? this.interp.feed : 0, !gs.includes(1));
     }
 
+    const probeG = gs.find((g) => g === 38.2 || g === 38.3 || g === 38.4 || g === 38.5);
+    if (probeG !== undefined) return this.probe(line, probeG);
+
     // Normal motion, interpreted in work coordinates.
     const end = this.plannedEnd();
     this.interp.setPosition([end[0] - this.wco[0], end[1] - this.wco[1], end[2] - this.wco[2]]);
@@ -502,6 +540,37 @@ export class FakeGrbl implements Transport {
     }
     const points = segs.map((s) => [s.to[0] + this.wco[0], s.to[1] + this.wco[1], s.to[2] + this.wco[2]] as Vec3);
     this.plan(points, segs[0].feed, !feedMove);
+  }
+
+  /** G38.2 / G38.3 toward the plate (G38.4 / G38.5, probing away, are treated as misses). */
+  private probe(line: string, g: number): void {
+    const start = [...this.mpos] as Vec3;
+    this.interp.setPosition([start[0] - this.wco[0], start[1] - this.wco[1], start[2] - this.wco[2]]);
+    const motionBefore = this.interp.motion;
+    const segs = this.interp.step(line);
+    this.interp.motion = motionBefore; // G38 is not a modal motion GRBL keeps
+    if (!segs.length) return this.send('error:26'); // no axis words
+    if (!(segs[0].feed > 0)) return this.send('error:22');
+    const towards = g === 38.2 || g === 38.3;
+    const alarmOnMiss = g === 38.2 || g === 38.4;
+    if (towards && this.probeTouching()) {
+      // Already touching before the move: GRBL raises "probe fail, initial state".
+      this.state = 'Alarm';
+      this.send('ALARM:4');
+      return;
+    }
+    const target: Vec3 = [segs[0].to[0] + this.wco[0], segs[0].to[1] + this.wco[1], segs[0].to[2] + this.wco[2]];
+    const surface = this.opts.probeSurfaceZ;
+    let end = target;
+    let contact = false;
+    if (towards && surface !== null && start[2] > surface && target[2] <= surface) {
+      const k = (start[2] - surface) / (start[2] - target[2]);
+      end = [start[0] + (target[0] - start[0]) * k, start[1] + (target[1] - start[1]) * k, surface];
+      contact = true;
+    }
+    this.planner.push({ points: [end], feed: segs[0].feed, rapid: false, jog: false, probe: { contact, alarmOnMiss } });
+    this.probing = true;
+    this.state = 'Run';
   }
 
   private plan(points: Vec3[], feed: number, rapid: boolean): void {

@@ -23,6 +23,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   const [jogZ, setJogZ] = useState(c.jogFeedZ);
   const [rapid, setRapid] = useState(c.rapidRate);
   const [steps, setSteps] = useState(c.jogSteps.join(', '));
+  const [probe, setProbe] = useState(c.probe);
   const m = s.machine;
   const ready = machineReady(s);
 
@@ -46,6 +47,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       jogFeedZ: jogZ,
       rapidRate: rapid,
       jogSteps: jogSteps.length ? jogSteps : c.jogSteps,
+      probe,
     };
     if (await run({ type: 'saveConfig', config })) {
       toast('info', 'Settings saved');
@@ -145,6 +147,45 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
             Jog steps (mm)
             <input className="input mono" value={steps} onChange={(e) => setSteps(e.target.value)} />
           </label>
+        </div>
+
+        <div className="section">
+          <div className="eyebrow" style={{ marginBottom: 8 }}>
+            Touch plate (Probe Z)
+          </div>
+          <div className="grid-3">
+            <label className="field">
+              Plate thickness (mm)
+              <input
+                className="input mono"
+                type="number"
+                step="0.01"
+                value={probe.plateThickness || ''}
+                placeholder="measure it"
+                onChange={(e) => setProbe({ ...probe, plateThickness: Number(e.target.value) || 0 })}
+              />
+            </label>
+            <label className="field">
+              Search distance (mm)
+              <input className="input mono" type="number" {...num(probe.maxTravel, (v) => setProbe({ ...probe, maxTravel: v }))} />
+            </label>
+            <label className="field">
+              Lift after (mm)
+              <input className="input mono" type="number" {...num(probe.retract, (v) => setProbe({ ...probe, retract: v }))} />
+            </label>
+            <label className="field">
+              Fast touch (mm/min)
+              <input className="input mono" type="number" {...num(probe.seekFeed, (v) => setProbe({ ...probe, seekFeed: v }))} />
+            </label>
+            <label className="field">
+              Slow touch (mm/min)
+              <input className="input mono" type="number" {...num(probe.latchFeed, (v) => setProbe({ ...probe, latchFeed: v }))} />
+            </label>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Measure the plate with calipers. Z zero ends up exactly this far below where the bit touches, so an error here
+            is an error in every cut depth.
+          </div>
         </div>
 
         {m.settings && (

@@ -129,9 +129,25 @@ Each opens a Terminal window, starts the server and opens the UI in your browser
 | Area | What's there |
 |---|---|
 | Top bar | Hub, agent and machine status, who sent the last command, Home, Unlock, and big Hold / Stop buttons |
-| Left | Position readout (work and machine), zero per axis, zero XY / Z, go to zero, jog pad with step and feed presets (arrow keys and Page Up / Down also jog) |
+| Left | Position readout (work and machine), zero per axis, zero XY / Z, go to zero, **Probe Z** with a touch plate, jog pad with step and feed presets (arrow keys and Page Up / Down also jog) |
 | Centre | 3D toolpath: remaining cuts in steel, finished cuts in gold, live tool position, work zero and machine envelope. Progress bar with %, line count, elapsed time and time left |
-| Right | Job controls and feed / spindle / rapid overrides, the file library, console with manual G-code entry, and macros |
+| Right | Job controls (including running a file group in order, with a bit-change stop between files) and feed / spindle / rapid overrides, the file library, console with manual G-code entry, and macros |
+
+## Probing Z and running file groups
+
+**Probe Z** (under the position readout) sets work Z with a touch plate, as WorkBee Control did:
+
+1. Measure the plate with calipers and enter its thickness in **Settings ▸ Touch plate**. Probing is
+   refused until you do.
+2. Jog the bit within 25 mm of the plate (the search distance can be changed in Settings), put the plate on the stock
+   under it and clip the lead to the bit. The dialog shows the probe input live, so you can test the circuit first.
+3. Press **Probe**. The bit touches down fast, lifts 2 mm and touches again slowly. Z0 is then set to the stock surface
+   and the bit lifts clear. If nothing is touched, GRBL stops with ALARM 5 and nothing is changed.
+
+**File groups.** Swarf sends one file per tool (and side A / side B) as a group. When you start a grouped file, the
+start dialog offers to run the rest of the group in order. After each file the spindle is turned off and the job
+waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
+the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
 ## Development
 

@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<string, string> = {
   running: 'Running',
   paused: 'Paused',
   stopping: 'Stopping',
+  toolchange: 'Bit change',
   done: 'Complete',
   stopped: 'Stopped',
   error: 'Failed',
@@ -42,10 +43,11 @@ export function ProgressPanel() {
         <div className="progress-pct">{pct.toFixed(pct < 10 && pct > 0 ? 1 : 0)}%</div>
         <div className="progress-main">
           <div className="row" style={{ marginBottom: 8 }}>
-            <span className="eyebrow" style={{ color: job.status === 'error' ? 'var(--danger)' : job.status === 'paused' ? 'var(--warn)' : 'var(--gold)' }}>
+            <span className="eyebrow" style={{ color: job.status === 'error' ? 'var(--danger)' : job.status === 'paused' || job.status === 'toolchange' ? 'var(--warn)' : 'var(--gold)' }}>
               {STATUS_LABEL[job.status]}
             </span>
             <span className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {job.group ? `${job.group.name} ${job.group.index + 1}/${job.group.files.length} · ` : ''}
               {job.fileName ?? 'No job'}
               {job.startedBy ? ` · started by ${job.startedBy}` : ''}
             </span>

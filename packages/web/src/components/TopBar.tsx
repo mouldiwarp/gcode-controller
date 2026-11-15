@@ -1,4 +1,4 @@
-import { jobActive, machineReady, useStore } from '../store.ts';
+import { jobActive, machineReady, useStore, nextGroupFile } from '../store.ts';
 
 export function TopBar() {
   const s = useStore((x) => x.state)!;
@@ -136,6 +136,17 @@ export function Banners() {
         <button className="btn small outline-gold" onClick={() => run({ type: 'unlock' })}>
           Unlock
         </button>
+      </div>
+    );
+  }
+  const next = nextGroupFile(s);
+  if (next) {
+    return (
+      <div className="banner warn">
+        <strong>Bit change</strong>
+        <span>
+          File {next.index} of {next.total} is done and the spindle is off. Fit the bit for <b>{next.name}</b>, re-probe Z, then start it.
+        </span>
       </div>
     );
   }

@@ -21,6 +21,9 @@ interface Store {
   /** File waiting for the start confirmation. */
   confirmStartId?: string;
   settingsOpen: boolean;
+  probeOpen: boolean;
+  /** The start confirmation is for the next file of a group. */
+  confirmNext: boolean;
   version: number;
   run: (cmd: Command) => Promise<boolean>;
   setClientName: (name: string) => void;
@@ -29,6 +32,8 @@ interface Store {
   setPreview: (id?: string) => void;
   askStart: (id?: string) => void;
   setSettingsOpen: (open: boolean) => void;
+  setProbeOpen: (open: boolean) => void;
+  askStartNext: (open: boolean) => void;
 }
 
 const NAME_KEY = 'gcc.clientName';
@@ -49,6 +54,8 @@ export const useStore = create<Store>((set, get) => ({
   clientName: storedName() ?? '',
   toasts: [],
   settingsOpen: false,
+  probeOpen: false,
+  confirmNext: false,
   version: 0,
 
   run: async (cmd) => {
@@ -85,8 +92,15 @@ export const useStore = create<Store>((set, get) => ({
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setPreview: (id) => set({ previewId: id }),
-  askStart: (id) => set({ confirmStartId: id }),
+  askStart: (id) => set({ confirmStartId: id, confirmNext: false }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setProbeOpen: (open) => set({ probeOpen: open }),
+  askStartNext: (open) => {
+    const s = get().state;
+    const g = s?.job.group;
+    if (!open || !g || s?.job.status !== 'toolchange') return set({ confirmStartId: undefined, confirmNext: false });
+    set({ confirmStartId: g.files[g.index + 1]?.id, confirmNext: true });
+  },
 }));
 
 function onMessage(msg: ServerMessage): void {
@@ -151,6 +165,14 @@ export function connect(): void {
 /** Commands that move or control the machine are only possible when the agent is reachable. */
 export function machineReady(s?: AppState): boolean {
   return !!s && s.link.agentConnected && s.machine.connection === 'connected';
+}
+
+/** The next file of a group waiting for a bit change, if any. */
+export function nextGroupFile(s?: AppState): { id: string; name: string; index: number; total: number } | undefined {
+  const g = s?.job.group;
+  if (!g || s?.job.status !== 'toolchange') return undefined;
+  const f = g.files[g.index + 1];
+  return f && { ...f, index: g.index + 1, total: g.files.length };
 }
 
 export function jobActive(s?: AppState): boolean {

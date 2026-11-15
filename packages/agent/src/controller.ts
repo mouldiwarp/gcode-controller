@@ -14,6 +14,7 @@ import {
   streamableLines,
   type Command,
   type ConsoleLine,
+  type JobGroup,
   type JobState,
   type MachineConfig,
   type MachineState,
@@ -67,6 +68,9 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   private settingsDraft: Record<string, string> | null = null;
   private lastWco: Vec3 = [0, 0, 0];
   private pendingConsole: ConsoleLine[] = [];
+  /** Last `[PRB:x,y,z:ok]` report (machine coordinates). */
+  private lastPrb?: { pos: Vec3; ok: boolean };
+  private lastAlarmCode?: number;
   private consoleTimer?: NodeJS.Timeout;
 
   constructor(
@@ -153,6 +157,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         return this.onAck(r.kind === 'ok', r.code, line);
       case 'alarm': {
         const message = describeAlarm(r.code!);
+        this.lastAlarmCode = r.code;
         this.log('error', `${line} ${message}`);
         this.updateMachine({ status: 'Alarm', alarm: { code: r.code!, message } });
         this.flushBuffers('Alarm');
@@ -172,6 +177,12 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       }
       case 'feedback':
         if (line.startsWith('[GC:')) this.updateMachine({ modal: line.slice(4, -1) });
+        if (line.startsWith('[PRB:')) {
+          const m = /^\[PRB:([-\d.]+),([-\d.]+),([-\d.]+):(\d)\]$/.exec(line);
+          if (m) this.lastPrb = { pos: [Number(m[1]), Number(m[2]), Number(m[3])], ok: m[4] === '1' };
+          this.log('in', line);
+          return;
+        }
         if (line.startsWith('[VER:')) this.updateMachine({ firmware: `GRBL ${line.slice(5, -1).replace(/:$/, '')}` });
         if (line.startsWith('[OPT:')) {
           const parts = line.slice(5, -1).split(',');
@@ -347,7 +358,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
 
   // ---------------- Jobs ----------------
 
-  startJob(text: string, meta: { fileId: string; fileName: string; by?: string; estSeconds?: number }): void {
+  startJob(text: string, meta: { fileId: string; fileName: string; by?: string; estSeconds?: number; group?: JobGroup }): void {
     const lines = streamableLines(text);
     this.jobLines = lines;
     this.jobCursor = 0;
@@ -361,9 +372,12 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       startedAt: Date.now(),
       startedBy: meta.by,
       estSeconds: meta.estSeconds,
+      group: meta.group,
     };
     this.emit('job', this.job);
-    this.log('info', `Job started: ${meta.fileName} (${lines.length} lines)${meta.by ? ` by ${meta.by}` : ''}`);
+    const g = meta.group;
+    const part = g ? ` [${g.name}: file ${g.index + 1} of ${g.files.length}]` : '';
+    this.log('info', `Job started: ${meta.fileName} (${lines.length} lines)${part}${meta.by ? ` by ${meta.by}` : ''}`);
     this.pump();
   }
 
@@ -393,6 +407,8 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   }
 
   private finishJob(status: 'done' | 'stopped'): void {
+    const g = this.job.group;
+    if (status === 'done' && g && g.index < g.files.length - 1) return this.awaitToolChange(g);
     this.job.status = status;
     this.job.finishedAt = Date.now();
     if (this.job.pausedAt) {
@@ -404,6 +420,22 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     this.emit('job', this.job);
     this.log('info', status === 'done' ? `Job complete: ${this.job.fileName}` : `Job stopped: ${this.job.fileName}`);
     this.emit('toast', { level: 'info', text: status === 'done' ? `Job complete: ${this.job.fileName}` : 'Job stopped' });
+  }
+
+  /**
+   * A file in a group finished and another follows. Turn the spindle off (the
+   * file may not have) and wait for the bit change and Start next.
+   */
+  private awaitToolChange(g: JobGroup): void {
+    this.job.status = 'toolchange';
+    this.job.finishedAt = Date.now();
+    this.job.ackedLines = this.job.totalLines;
+    this.jobLines = [];
+    this.internal('M5');
+    this.emit('job', this.job);
+    const next = g.files[g.index + 1];
+    this.log('info', `File ${g.index + 1} of ${g.files.length} complete: ${this.job.fileName}. Next: ${next.name}. Change the bit, re-probe Z, then Start next.`);
+    this.emit('toast', { level: 'info', text: `File ${g.index + 1} of ${g.files.length} done. Change the bit for ${next.name}` });
   }
 
   private scheduleJobEmit(): void {
@@ -427,6 +459,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       need();
       if (this.isJobActive) throw new Error(`Can't ${what} while a job is running`);
       if (this.machine.status === 'Alarm') throw new Error(`Can't ${what} in ALARM. Home or unlock first`);
+      if (this.machine.probing) throw new Error(`Can't ${what} while probing`);
     };
     const run = async (text: string) => {
       const r = await this.user(text, by);
@@ -536,13 +569,82 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         return;
       case 'clearJob':
         if (this.isJobActive) throw new Error('A job is still running');
+        if (this.job.status === 'toolchange') this.log('info', `Group ${this.job.group?.name ?? ''} ended after file ${(this.job.group?.index ?? 0) + 1}`, by);
         this.job = initialJob();
         this.emit('job', this.job);
         return;
+      case 'probeZ':
+        idle('probe');
+        return this.probeZ(by);
       case 'start':
+      case 'startNext':
         throw new Error('start must go through the agent');
       default:
         throw new Error(`Unsupported command ${cmd.type}`);
+    }
+  }
+
+  /**
+   * Set work Z from a touch plate: a fast touch, lift 2 mm, a slow touch, then
+   * set the contact point to the plate thickness and lift clear. Uses G38.2, so
+   * GRBL raises ALARM:5 if nothing is touched within the search distance.
+   */
+  private async probeZ(by?: string): Promise<void> {
+    const p = this.config?.probe;
+    if (!p || !(p.plateThickness > 0)) throw new Error('Set the touch plate thickness in Settings first');
+    if (this.machine.status !== 'Idle') throw new Error(`The machine is busy (${this.machine.status})`);
+    if (this.machine.pins?.includes('P')) {
+      throw new Error('The probe input is already closed. Check the plate is not touching the bit and the clip is not shorted');
+    }
+    this.updateMachine({ probing: true });
+    this.log('info', `Probing Z (plate ${p.plateThickness} mm, searching ${p.maxTravel} mm down)`, by);
+    const fail = (message: string): never => {
+      this.updateMachine({ probing: false, lastProbe: { ok: false, message, t: Date.now() } });
+      throw new Error(message);
+    };
+    const step = async (text: string) => {
+      this.log('out', text, by);
+      this.lastAlarmCode = undefined;
+      const r = await this.enqueue({ text, kind: 'user', by, echo: true });
+      if (r.ok) return;
+      if (this.lastAlarmCode === 5) fail(`No contact within ${p.maxTravel} mm. Check the clip and plate, then unlock to continue`);
+      if (this.lastAlarmCode === 4) fail('The probe input was already closed when probing started. Check the clip, then unlock');
+      fail(`Probing stopped: ${r.error ?? 'command failed'}`);
+    };
+    const touch = async (text: string) => {
+      this.lastPrb = undefined;
+      await step(text);
+      const prb = this.lastPrb as { pos: Vec3; ok: boolean } | undefined;
+      if (!prb?.ok) return fail('The probe did not report a contact');
+      return prb.pos;
+    };
+
+    const z0 = this.machine.wpos[2];
+    await step('G21G90');
+    const first = await touch(`G38.2Z${fmt(z0 - p.maxTravel)}F${Math.round(p.seekFeed)}`);
+    const firstWorkZ = first[2] - this.machine.wco[2];
+    await step(`G0Z${fmt(firstWorkZ + 2)}`);
+    const second = await touch(`G38.2Z${fmt(firstWorkZ - 2)}F${Math.round(p.latchFeed)}`);
+    // The tool now rests on the plate: that height is the plate thickness above the stock.
+    await step(`G10L20P0Z${fmt(p.plateThickness)}`);
+    await step(`G0Z${fmt(p.plateThickness + p.retract)}`);
+    await step('G4P0.01'); // a dwell is answered only once motion has stopped
+    await this.waitForIdle();
+    const message = `Z zeroed on the stock surface (plate ${p.plateThickness} mm). Remove the plate and clip`;
+    this.log('info', message, by);
+    this.updateMachine({ probing: false, lastProbe: { ok: true, message, t: Date.now(), contactZ: second[2] } });
+  }
+
+  /** Wait for a fresh status report showing Idle (up to 2 s). */
+  private async waitForIdle(): Promise<void> {
+    const end = Date.now() + 2000;
+    let seen = 0;
+    const onMachine = () => seen++;
+    this.on('machine', onMachine);
+    try {
+      while (Date.now() < end && !(seen > 0 && this.machine.status === 'Idle')) await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      this.off('machine', onMachine);
     }
   }
 
@@ -553,10 +655,17 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     if (busy) throw new Error('A job is already running');
     if (this.machine.status === 'Alarm') throw new Error('The machine is in ALARM. Home or unlock first');
     if (this.machine.status !== 'Idle') throw new Error(`The machine is busy (${this.machine.status})`);
+    if (this.machine.probing) throw new Error('Probing is in progress');
   }
 
   markLoading(fileId: string, fileName: string, by?: string): void {
     this.job = { ...initialJob(), status: 'loading', fileId, fileName, startedBy: by };
+    this.emit('job', this.job);
+  }
+
+  /** Put back a job state saved before loading (a group waiting for its next file). */
+  restoreJob(job: JobState): void {
+    this.job = job;
     this.emit('job', this.job);
   }
 

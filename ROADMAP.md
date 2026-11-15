@@ -14,6 +14,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 6 | Sync hardening: restart mid-job, multi-browser tests, double-click launchers, setup guide | ✅ |
 | 6b | Mac app launched from Spotlight (hub / agent / simulator roles; quitting stops the server) | ✅ |
 | 7 | "Send to GRBL Controller" in Swarf and Fretboard Modeller | ✅ merged into main in both apps |
+| 7b | Z probe with a touch plate; run a file group in order with bit-change stops | ✅ (simulator-tested; check on the machine) |
 | 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
 ## Next up
@@ -24,13 +25,15 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 - ⬜ Confirm the homing corner (`$23`) and draw the envelope in the right place. Today the envelope assumes
   GRBL's default (machine 0,0,0 at back-right-top).
 - ⬜ Check spindle control: `M3 S…` against `$30`/`$31` with the 1.5 kW VFD.
+- ⬜ Test Probe Z on the real plate: the probe pin (`Pn:P`) lights when the plate touches the bit, and a
+  probe that misses raises ALARM 5.
 - ⬜ First air cut of `samples/test-square.nc` with Z zeroed 20 mm above the stock.
 
 ### Workflow features (from UGS and WorkBee)
-- ⬜ **Z probe with a touch plate** (`G38.2`), with plate thickness in Settings. WorkBee Control had this; it's
-  the biggest time-saver for setting Z.
-- ⬜ **Run a job group in order.** Swarf sends one file per tool (and side A / side B). Add "Run next file"
-  with a pause for the bit change and a Z re-probe in between.
+- ✅ **Z probe with a touch plate** (`G38.2`): a fast touch then a slow one, with plate thickness in Settings.
+- ✅ **Run a job group in order**, stopping for a bit change and a Z re-probe between files.
+- ⬜ Probe X/Y corners with the touch plate (corner-finding), as WorkBee's XYZ probe block does.
+- ⬜ Remember the probe result per group, and warn on Start next if Z wasn't re-probed after the bit change.
 - ⬜ **Continuous jog:** hold a button or key to jog, release to stop (`$J=` plus jog cancel).
 - ⬜ **Resume from line N** after a stop, with a safe preamble (spindle on, move to safe Z, then XY, then down).
 - ⬜ **Check mode** (`$C`) dry run, which streams the file through GRBL's parser without moving, to catch
