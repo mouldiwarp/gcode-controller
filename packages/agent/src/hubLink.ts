@@ -13,6 +13,12 @@ interface Events {
   url: [string];
 }
 
+/** Timestamped connection log on stdout (the app's log window, or Terminal). */
+function trace(msg: string): void {
+  if (process.env.GCC_QUIET) return;
+  console.log(`${new Date().toISOString().slice(11, 23)} hub link: ${msg}`);
+}
+
 export class HubLink extends EventEmitter<Events> {
   private ws?: WebSocket;
   private retryTimer?: NodeJS.Timeout;
@@ -22,6 +28,8 @@ export class HubLink extends EventEmitter<Events> {
   private pending = new Map<string, (r: { ok: boolean; error?: string }) => void>();
   connected = false;
   url?: string;
+  /** Set after a failed attempt, so retries while the hub is down aren't logged every time. */
+  private failing = false;
 
   constructor(opts: { url?: string; discover: boolean }) {
     super();
@@ -70,9 +78,12 @@ export class HubLink extends EventEmitter<Events> {
       return;
     }
     const wsUrl = this.url.replace(/^http/, 'ws') + '/agent';
+    if (!this.failing) trace(`connecting to ${wsUrl}`);
     const ws = new WebSocket(wsUrl, { handshakeTimeout: 4000 });
     this.ws = ws;
     ws.on('open', () => {
+      trace(this.failing ? 'connected (hub is back)' : 'connected');
+      this.failing = false;
       this.connected = true;
       this.backoff = 1000;
       this.emit('open');
@@ -91,8 +102,9 @@ export class HubLink extends EventEmitter<Events> {
       }
       this.emit('message', msg);
     });
-    ws.on('close', () => {
+    ws.on('close', (code) => {
       if (this.ws !== ws) return;
+      if (this.connected) trace(`closed (${code}); retrying`);
       const was = this.connected;
       this.connected = false;
       for (const [, resolve] of this.pending) resolve({ ok: false, error: 'Lost connection to the hub' });
@@ -100,13 +112,18 @@ export class HubLink extends EventEmitter<Events> {
       if (was) this.emit('close');
       this.scheduleRetry();
     });
-    ws.on('error', () => undefined);
+    ws.on('error', (err) => {
+      if (this.connected || this.failing) return;
+      this.failing = true;
+      trace(`can't reach the hub (${(err as NodeJS.ErrnoException).code ?? err.message}); retrying every few seconds`);
+    });
     // Detect half-open connections (Wi-Fi drop without a FIN).
     let alive = true;
     ws.on('pong', () => (alive = true));
     const ping = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return clearInterval(ping);
       if (!alive) {
+        trace('no pong from the hub in 5 s; dropping the connection');
         ws.terminate();
         return clearInterval(ping);
       }
