@@ -32,6 +32,10 @@ export interface HubOptions {
   port?: number;
   host?: string;
   dataDir: string;
+  /** The folder library (default <dataDir>/library; the app passes ~/Documents/GCode Controller). */
+  libraryDir?: string;
+  /** Where deleted files go: the macOS Trash ('system') or a hidden folder in the library. */
+  trash?: 'system' | 'folder';
   inboxDir?: string;
   advertise?: boolean;
   name?: string;
@@ -65,7 +69,7 @@ export class Hub {
   port = 0;
 
   constructor(readonly opts: HubOptions) {
-    this.library = new LibraryStore(opts.dataDir);
+    this.library = new LibraryStore({ dataDir: opts.dataDir, libraryDir: opts.libraryDir, trash: opts.trash });
     this.name = opts.name ?? hostname().replace(/\.local$/, '');
   }
 
@@ -99,6 +103,8 @@ export class Hub {
         txt: { version: PROTOCOL_VERSION },
       });
     }
+    this.library.onChange = () => this.libraryChanged();
+    this.library.watch();
     if (this.opts.inboxDir) {
       this.inbox = new InboxWatcher(
         this.opts.inboxDir,
@@ -116,6 +122,7 @@ export class Hub {
 
   async stop(): Promise<void> {
     this.inbox?.stop();
+    this.library.close();
     if (this.service) await new Promise<void>((r) => this.service!.stop?.(() => r()) ?? r());
     this.bonjour?.destroy();
     this.agent?.terminate();
@@ -137,6 +144,8 @@ export class Hub {
       machine: this.machine,
       job: this.job,
       library: this.library.items,
+      folders: this.library.folders,
+      libraryRoot: this.library.root,
       macros: this.library.macros,
       config: this.library.config,
       console: this.console,
@@ -158,8 +167,13 @@ export class Hub {
 
   private libraryChanged(): void {
     const s = this.snapshot();
-    this.broadcast({ t: 'patch', patch: { library: s.library, macros: s.macros, config: s.config } });
-    this.sendAgent({ t: 'library', library: s.library, macros: s.macros, config: s.config, hubName: this.name });
+    this.broadcast({ t: 'patch', patch: { library: s.library, folders: s.folders, libraryRoot: s.libraryRoot, macros: s.macros, config: s.config } });
+    this.sendLibraryToAgent();
+  }
+
+  private sendLibraryToAgent(): void {
+    const s = this.snapshot();
+    this.sendAgent({ t: 'library', library: s.library, folders: s.folders, libraryRoot: s.libraryRoot, macros: s.macros, config: s.config, hubName: this.name });
   }
 
   private addConsole(incoming: ConsoleLine[]): void {
@@ -176,8 +190,7 @@ export class Hub {
   private onAgent(ws: WebSocket): void {
     if (this.agent && this.agent !== ws) this.agent.terminate();
     this.agent = ws;
-    const s = this.snapshot();
-    this.sendAgent({ t: 'library', library: s.library, macros: s.macros, config: s.config, hubName: this.name });
+    this.sendLibraryToAgent();
 
     let alive = true;
     ws.on('pong', () => (alive = true));
@@ -249,10 +262,26 @@ export class Hub {
     try {
       switch (cmd.type) {
         case 'deleteFile':
-          if (this.job.fileId === cmd.fileId && ['loading', 'running', 'paused', 'stopping'].includes(this.job.status)) {
-            throw new Error("Can't delete the file that is running");
-          }
+          if (this.job.fileId === cmd.fileId && this.jobBusy) throw new Error("Can't delete the file that is running");
           this.library.delete(cmd.fileId);
+          break;
+        case 'renameFile':
+          this.library.renameFile(cmd.fileId, cmd.name);
+          break;
+        case 'moveFile':
+          this.library.moveFile(cmd.fileId, cmd.folder);
+          break;
+        case 'createFolder':
+          this.library.createFolder(cmd.path);
+          break;
+        case 'renameFolder':
+          this.library.renameFolder(cmd.path, cmd.to);
+          break;
+        case 'deleteFolder':
+          if (this.jobBusy && this.library.filesIn(cmd.path).some((f) => f.id === this.job.fileId)) {
+            throw new Error("Can't delete the folder holding the file that is running");
+          }
+          this.library.deleteFolder(cmd.path);
           break;
         case 'saveMacro':
           this.library.saveMacro(cmd.macro);
@@ -269,6 +298,10 @@ export class Hub {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  }
+
+  private get jobBusy(): boolean {
+    return ['loading', 'running', 'paused', 'stopping'].includes(this.job.status);
   }
 
   private forwardToAgent(cmd: Command, by: string): Promise<{ ok: boolean; error?: string }> {
@@ -347,6 +380,7 @@ export class Hub {
           source: header('x-source') ?? url.searchParams.get('source') ?? 'Upload',
           group: header('x-group') ?? url.searchParams.get('group') ?? undefined,
           groupIndex: Number(header('x-group-index') ?? url.searchParams.get('groupIndex')) || undefined,
+          folder: header('x-folder') ?? url.searchParams.get('folder') ?? undefined,
         });
         this.libraryChanged();
         this.toast('info', `Received ${item.name}${item.source !== 'Upload' ? ` from ${item.source}` : ''}`);

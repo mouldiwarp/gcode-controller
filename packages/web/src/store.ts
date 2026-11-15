@@ -22,6 +22,7 @@ interface Store {
   confirmStartId?: string;
   settingsOpen: boolean;
   probeOpen: boolean;
+  managerOpen: boolean;
   /** The start confirmation is for the next file of a group. */
   confirmNext: boolean;
   version: number;
@@ -33,6 +34,7 @@ interface Store {
   askStart: (id?: string) => void;
   setSettingsOpen: (open: boolean) => void;
   setProbeOpen: (open: boolean) => void;
+  setManagerOpen: (open: boolean) => void;
   askStartNext: (open: boolean) => void;
 }
 
@@ -55,6 +57,7 @@ export const useStore = create<Store>((set, get) => ({
   toasts: [],
   settingsOpen: false,
   probeOpen: false,
+  managerOpen: false,
   confirmNext: false,
   version: 0,
 
@@ -95,6 +98,7 @@ export const useStore = create<Store>((set, get) => ({
   askStart: (id) => set({ confirmStartId: id, confirmNext: false }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setProbeOpen: (open) => set({ probeOpen: open }),
+  setManagerOpen: (open) => set({ managerOpen: open }),
   askStartNext: (open) => {
     const s = get().state;
     const g = s?.job.group;

@@ -78,7 +78,10 @@ export interface JobState {
 
 export interface LibraryItem {
   id: string;
+  /** File name on disk, including the extension. */
   name: string;
+  /** Folder inside the library, '/'-separated; '' for the top level. */
+  folder: string;
   source: string;
   size: number;
   sha256: string;
@@ -144,6 +147,10 @@ export interface AppState {
   machine: MachineState;
   job: JobState;
   library: LibraryItem[];
+  /** Every folder in the library, empty ones included, '/'-separated. */
+  folders: string[];
+  /** Where the library lives on the hub's Mac, for display. */
+  libraryRoot?: string;
   macros: Macro[];
   config: MachineConfig;
   console: ConsoleLine[];
@@ -175,11 +182,26 @@ export type Command =
   | { type: 'clearJob' }
   // Library (handled by the hub)
   | { type: 'deleteFile'; fileId: string }
+  | { type: 'renameFile'; fileId: string; name: string }
+  | { type: 'moveFile'; fileId: string; folder: string }
+  | { type: 'createFolder'; path: string }
+  | { type: 'renameFolder'; path: string; to: string }
+  | { type: 'deleteFolder'; path: string }
   | { type: 'saveMacro'; macro: Macro }
   | { type: 'deleteMacro'; id: string }
   | { type: 'saveConfig'; config: Partial<MachineConfig> };
 
-export const LIBRARY_COMMANDS = new Set<Command['type']>(['deleteFile', 'saveMacro', 'deleteMacro', 'saveConfig']);
+export const LIBRARY_COMMANDS = new Set<Command['type']>([
+  'deleteFile',
+  'renameFile',
+  'moveFile',
+  'createFolder',
+  'renameFolder',
+  'deleteFolder',
+  'saveMacro',
+  'deleteMacro',
+  'saveConfig',
+]);
 
 export function isLibraryCommand(cmd: Command): boolean {
   return LIBRARY_COMMANDS.has(cmd.type);
@@ -208,7 +230,7 @@ export type AgentToHub =
   | { t: 'toast'; level: 'info' | 'warn' | 'error'; text: string };
 
 export type HubToAgent =
-  | { t: 'library'; library: LibraryItem[]; macros: Macro[]; config: MachineConfig; hubName: string }
+  | { t: 'library'; library: LibraryItem[]; folders: string[]; libraryRoot?: string; macros: Macro[]; config: MachineConfig; hubName: string }
   | { t: 'cmd'; reqId: string; cmd: Command; by: string }
   | { t: 'result'; reqId: string; ok: boolean; error?: string };
 

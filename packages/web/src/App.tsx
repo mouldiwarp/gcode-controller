@@ -11,6 +11,7 @@ import { ToolsPanel } from './components/Console.tsx';
 import { StartDialog } from './components/StartDialog.tsx';
 import { SettingsDialog } from './components/Settings.tsx';
 import { ProbeDialog } from './components/ProbeDialog.tsx';
+import { LibraryManager } from './components/LibraryManager.tsx';
 import { Toasts } from './components/Toasts.tsx';
 
 export function App() {
@@ -53,6 +54,7 @@ export function App() {
       </main>
       <StartDialog />
       <SettingsDialog />
+      <LibraryManager />
       <ProbeDialog />
       <Toasts />
     </div>

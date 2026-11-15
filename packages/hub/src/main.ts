@@ -12,7 +12,8 @@ if (args.help) {
   console.log(`GCode Controller hub: file library and sync server for the design Mac.
 
   --port <n>        port (default ${DEFAULT_HUB_PORT})
-  --data <dir>      library directory (default ~/Library/Application Support/GCodeController/hub)
+  --library <dir>   the G-code library folder (default ~/Documents/GCode Controller)
+  --data <dir>      settings and macros (default ~/Library/Application Support/GCodeController/hub)
   --inbox <dir>     watched folder (default ~/GCode Inbox)
   --no-inbox        don't watch a folder
   --no-bonjour      don't advertise on the local network
@@ -23,6 +24,8 @@ if (args.help) {
 const hub = new Hub({
   port: Number(args.port ?? DEFAULT_HUB_PORT),
   dataDir: String(args.data ?? join(homedir(), 'Library/Application Support/GCodeController/hub')),
+  libraryDir: String(args.library ?? join(homedir(), 'Documents', 'GCode Controller')),
+  trash: 'system',
   inboxDir: args['no-inbox'] ? undefined : String(args.inbox ?? join(homedir(), 'GCode Inbox')),
   advertise: !args['no-bonjour'],
   name: typeof args.name === 'string' ? args.name : undefined,
@@ -49,6 +52,7 @@ console.log(`GCode Controller hub "${hub.name}"`);
 console.log(`  UI:      http://localhost:${port}`);
 for (const u of lan) console.log(`           ${u}`);
 console.log(`  Upload:  curl -X POST --data-binary @part.nc -H 'X-Filename: part.nc' http://localhost:${port}/api/jobs`);
+console.log(`  Library: ${hub.library.root}`);
 if (hub.opts.inboxDir) console.log(`  Inbox:   ${hub.opts.inboxDir}`);
 
 const shutdown = async () => {

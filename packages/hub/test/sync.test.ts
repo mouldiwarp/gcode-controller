@@ -178,6 +178,24 @@ describe('hub ↔ agent sync', () => {
     expect(await studio.cmd({ type: 'start', fileId: ids[1] })).toMatchObject({ ok: true });
   });
 
+  it('manages folders from the garage, and both browsers see the same tree', async () => {
+    const { hubPort, studio, garage } = await setup();
+    expect(await garage.cmd({ type: 'createFolder', path: 'Guitars/Strat' })).toMatchObject({ ok: true });
+    await until(() => studio.state!.folders.includes('Guitars/Strat'), 3000, 'folder on studio');
+    const { body } = await upload(hubPort, 'body.nc', program(10), { 'X-Folder': encodeURIComponent('Guitars/Strat') });
+    await until(() => garage.state!.library.some((f) => f.id === body.id && f.folder === 'Guitars/Strat'), 3000, 'file in folder');
+    expect(await garage.cmd({ type: 'renameFolder', path: 'Guitars', to: 'Instruments' })).toMatchObject({ ok: true });
+    await until(() => studio.state!.library.find((f) => f.id === body.id)?.folder === 'Instruments/Strat', 3000, 'renamed');
+    expect(await studio.cmd({ type: 'moveFile', fileId: body.id, folder: '' })).toMatchObject({ ok: true });
+    await until(() => garage.state!.library.find((f) => f.id === body.id)?.folder === '', 3000, 'moved to top');
+    // The file still runs after all that moving.
+    expect(await garage.cmd({ type: 'start', fileId: body.id })).toMatchObject({ ok: true });
+    await until(() => studio.state!.job.status === 'done', 15000, 'job done');
+    expect(await studio.cmd({ type: 'deleteFolder', path: 'Instruments' })).toMatchObject({ ok: true });
+    await until(() => garage.state!.folders.length === 0, 3000, 'folder gone');
+    expect(await studio.cmd({ type: 'createFolder', path: '../escape' })).toMatchObject({ ok: false });
+  });
+
   it('lets the garage start, the studio pause, and the garage resume', async () => {
     const { hubPort, studio, garage } = await setup(3);
     const { body } = await upload(hubPort, 'slow.nc', program(400));

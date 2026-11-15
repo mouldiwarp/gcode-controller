@@ -109,9 +109,24 @@ To launch without the app, double-click:
 
 Each opens a Terminal window, starts the server and opens the UI in your browser. Close the window to stop it.
 
+## The library
+
+Your G-code lives in ordinary folders under **`~/Documents/GCode Controller`** on the design Mac, one folder per
+project. Swarf groups (one file per tool, side A / side B) arrive in a folder named after the group; single files land
+at the top level. Re-sending a file with the same name replaces it, and the old copy goes to the Trash.
+
+- **Library panel**: a folder tree beside the job controls. Drop files on a folder to upload into it.
+- **Manage** opens the library manager: make, rename and delete folders, rename files, and move files with the
+  **Move to** menu or by dragging them onto a folder. Deleted files and folders go to the macOS Trash.
+- **Finder** works too: add, move, rename or delete files and folders there, and the library follows within a few
+  seconds. Moved files keep their history.
+
+Use `--library <dir>` to keep the library somewhere else. The first time the hub starts with the folder library, it
+copies files from the old flat store in Application Support into the folders (the originals are kept as a backup).
+
 ## Sending G-code
 
-- **Drag and drop** files onto the Library panel, or click **Upload**.
+- **Drag and drop** files onto the Library panel (or onto a folder in it), or click **Upload**.
 - **Drop files in `~/GCode Inbox`** on the design Mac. The hub imports them and moves them into `~/GCode Inbox/imported`.
 - **From an app or script**, POST the file to the hub:
 

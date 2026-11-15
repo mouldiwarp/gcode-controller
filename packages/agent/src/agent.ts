@@ -51,6 +51,8 @@ export class Agent {
   readonly hub: HubLink;
   readonly name: string;
   library: LibraryItem[] = [];
+  folders: string[] = [];
+  libraryRoot?: string;
   macros: Macro[] = [];
   config: MachineConfig = DEFAULT_CONFIG;
   hubName?: string;
@@ -150,6 +152,8 @@ export class Agent {
       machine: this.controller.machine,
       job: this.controller.job,
       library: this.library,
+      folders: this.folders,
+      libraryRoot: this.libraryRoot,
       macros: this.macros,
       config: this.config,
       console: this.controller.console,
@@ -194,13 +198,15 @@ export class Agent {
     this.hub.on('message', (msg) => {
       if (msg.t === 'library') {
         this.library = msg.library;
+        this.folders = msg.folders ?? [];
+        this.libraryRoot = msg.libraryRoot;
         this.macros = msg.macros;
         this.config = msg.config;
         this.hubName = msg.hubName;
         this.controller.macros = msg.macros;
         this.controller.config = msg.config;
         this.saveCachedLibrary();
-        this.broadcast({ t: 'patch', patch: { library: this.library, macros: this.macros, config: this.config } });
+        this.broadcast({ t: 'patch', patch: { library: this.library, folders: this.folders, libraryRoot: this.libraryRoot, macros: this.macros, config: this.config } });
         this.broadcastLink();
       } else if (msg.t === 'cmd') {
         void this.execute(msg.cmd, msg.by).then((r) => this.hub.send({ t: 'result', reqId: msg.reqId, ...r }));
@@ -217,7 +223,9 @@ export class Agent {
     if (!existsSync(file)) return;
     try {
       const data = JSON.parse(readFileSync(file, 'utf8'));
-      this.library = data.library ?? [];
+      this.library = (data.library ?? []).map((i: LibraryItem) => ({ ...i, folder: i.folder ?? '' }));
+      this.folders = data.folders ?? [];
+      this.libraryRoot = data.libraryRoot;
       this.macros = data.macros ?? [];
       this.config = { ...DEFAULT_CONFIG, ...(data.config ?? {}), probe: { ...DEFAULT_CONFIG.probe, ...data.config?.probe } };
       this.hubName = data.hubName;
@@ -230,7 +238,10 @@ export class Agent {
 
   private saveCachedLibrary(): void {
     const file = join(this.opts.dataDir, 'library.json');
-    writeFileSync(file, JSON.stringify({ library: this.library, macros: this.macros, config: this.config, hubName: this.hubName }));
+    writeFileSync(
+      file,
+      JSON.stringify({ library: this.library, folders: this.folders, libraryRoot: this.libraryRoot, macros: this.macros, config: this.config, hubName: this.hubName }),
+    );
   }
 
   // ---------------- Commands ----------------
