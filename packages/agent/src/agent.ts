@@ -271,9 +271,8 @@ export class Agent {
       throw err;
     }
     // The machine could have changed state while the file downloaded.
-    this.controller.job.status = 'idle';
     try {
-      this.controller.checkCanStart();
+      this.controller.checkCanStart({ loading: true });
     } catch (err) {
       this.controller.cancelLoading((err as Error).message);
       throw err;

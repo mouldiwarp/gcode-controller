@@ -547,9 +547,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   }
 
   /** Refuse to start unless the machine is idle and nothing else is running. */
-  checkCanStart(): void {
+  checkCanStart(opts: { loading?: boolean } = {}): void {
     if (this.machine.connection !== 'connected') throw new Error('The machine is not connected');
-    if (this.isJobActive) throw new Error('A job is already running');
+    const busy = opts.loading ? this.isJobActive && this.job.status !== 'loading' : this.isJobActive;
+    if (busy) throw new Error('A job is already running');
     if (this.machine.status === 'Alarm') throw new Error('The machine is in ALARM. Home or unlock first');
     if (this.machine.status !== 'Idle') throw new Error(`The machine is busy (${this.machine.status})`);
   }

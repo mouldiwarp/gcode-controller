@@ -60,7 +60,8 @@ Without a machine (built-in GRBL simulator):
 npm run agent -- --simulate
 ```
 
-With the machine plugged in over USB (the port is found automatically; CH340 driver required on older macOS):
+With the machine plugged in over USB (the port is found automatically, including the CH340 as
+`/dev/cu.wchusbserial*` with the CH341SER driver or `/dev/cu.usbserial-*` without it):
 
 ```sh
 npm run agent
@@ -68,6 +69,9 @@ npm run agent
 
 Open <http://localhost:8081> on the machine Mac. The agent finds the hub over Bonjour. To point it at a hub
 yourself, pass `--hub http://design-mac.local:8080`.
+
+See **[docs/SETUP.md](docs/SETUP.md)** for the full two-Mac walkthrough, including testing the sync with the
+simulator before the machine arrives.
 
 ### Start at login
 
