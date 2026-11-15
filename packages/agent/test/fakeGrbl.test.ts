@@ -43,7 +43,7 @@ describe('FakeGrbl', () => {
   });
 
   it('moves, reports status and sets work zero', async () => {
-    sim = new FakeGrbl({ bootDelayMs: 0, homingRequired: false, speed: 100 });
+    sim = new FakeGrbl({ bootDelayMs: 0, homingRequired: false, speed: 100, workOffset: [0, 0, 0] });
     const out = collect(sim);
     await sim.open();
     sim.write('G0X-10Y-20\n');
@@ -55,6 +55,19 @@ describe('FakeGrbl', () => {
     sim.write('?');
     await until(() => out.some((l) => l.startsWith('<Idle|MPos:-10.000,-20.000,0.000')));
     expect(out.find((l) => l.startsWith('<Idle'))).toContain('WCO:-10.000,-20.000,0.000');
+  });
+
+  it('refuses moves above the top of Z even without soft limits', async () => {
+    sim = new FakeGrbl({ bootDelayMs: 0, homingRequired: false, speed: 100, workOffset: [0, 0, 0] });
+    const out = collect(sim);
+    await sim.open();
+    sim.write('$J=G91Z5F1000\n');
+    await until(() => out.includes('error:15'));
+    expect(sim.mpos[2]).toBe(0);
+    sim.write('G0Z5\n');
+    await until(() => out.includes('ALARM:2'));
+    expect(sim.state).toBe('Alarm');
+    expect(sim.mpos[2]).toBe(0);
   });
 
   it('flags RX overflow when the host ignores the buffer', async () => {

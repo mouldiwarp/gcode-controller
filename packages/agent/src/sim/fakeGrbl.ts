@@ -19,6 +19,11 @@ export interface FakeGrblOptions {
   homingRequired?: boolean;
   /** Raise ALARM:2 for moves outside the envelope. */
   softLimits?: boolean;
+  /**
+   * G54 work offset at power-on (GRBL keeps it across restarts). Defaults to a spot on the
+   * bed below the top of Z, so programs that lift to a safe height stay inside the travel.
+   */
+  workOffset?: Vec3;
   /** Travel per axis (machine coords run from -travel to 0). */
   travel?: Vec3;
   rapidRate?: number;
@@ -91,11 +96,13 @@ export class FakeGrbl implements Transport {
       homingRequired: opts.homingRequired ?? true,
       softLimits: opts.softLimits ?? false,
       travel: opts.travel ?? [800, 800, 120],
+      workOffset: opts.workOffset ?? [-400, -400, -60],
       rapidRate: opts.rapidRate ?? 5000,
       tickMs: opts.tickMs ?? 10,
       bootDelayMs: opts.bootDelayMs ?? 50,
       probeSurfaceZ: opts.probeSurfaceZ === undefined ? -60 : opts.probeSurfaceZ,
     };
+    this.wco = [...this.opts.workOffset] as Vec3;
     this.interp = new Interpreter({ rapidRate: this.opts.rapidRate });
     this.settings = {
       0: 10, 1: 25, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 10: 3, 11: 0.01, 12: 0.002, 13: 0,
@@ -478,10 +485,19 @@ export class FakeGrbl implements Transport {
       else if (machine) target[i] = v;
       else target[i] = v + this.wco[i];
     }
-    if (this.opts.softLimits && !this.inEnvelope(target)) return this.send('error:15');
+    if (!this.allowed([target])) return this.send('error:15');
     this.planner.push({ points: [target], feed, rapid: false, jog: true });
     this.state = 'Jog';
     this.send('ok');
+  }
+
+  /**
+   * Soft limits when enabled; otherwise only the top of Z, which is always enforced so the
+   * simulator can't end up above the travel (a real machine would hit its Z limit switch).
+   */
+  private allowed(points: Vec3[]): boolean {
+    if (this.opts.softLimits) return points.every((p) => this.inEnvelope(p));
+    return points.every((p) => p[2] <= 0.001);
   }
 
   private inEnvelope(p: Vec3): boolean {
@@ -574,7 +590,7 @@ export class FakeGrbl implements Transport {
   }
 
   private plan(points: Vec3[], feed: number, rapid: boolean): void {
-    if (this.opts.softLimits && !points.every((p) => this.inEnvelope(p))) {
+    if (!this.allowed(points)) {
       this.planner = [];
       this.state = 'Alarm';
       this.send('ALARM:2');

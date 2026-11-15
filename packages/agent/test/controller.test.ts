@@ -92,7 +92,7 @@ describe('GrblController', () => {
 
   it('sets work zero and jogs', async () => {
     await setup();
-    await ctl.command({ type: 'jog', x: -10, y: -5, feed: 3000 });
+    await ctl.command({ type: 'jog', x: -10, y: -5, z: -20, feed: 3000 });
     await until(() => ctl.machine.mpos[0] === -10 && ctl.machine.status === 'Idle');
     await ctl.command({ type: 'zero', axes: ['X', 'Y', 'Z'] });
     await until(() => ctl.machine.wpos[0] === 0 && ctl.machine.wco[0] === -10);
