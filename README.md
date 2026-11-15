@@ -60,8 +60,10 @@ Without a machine (built-in GRBL simulator):
 npm run agent -- --simulate
 ```
 
-With the machine plugged in over USB (the port is found automatically, including the CH340 as
-`/dev/cu.wchusbserial*` with the CH341SER driver or `/dev/cu.usbserial-*` without it):
+With the machine plugged in over USB (the port is found automatically). No driver is needed: macOS 11 and
+later include Apple's own driver for the CH340, and it shows up as `/dev/cu.usbserial-*`. Skip the CH341
+driver on FoxAlien's USB stick, which is for Windows. To see the ports, run `npm run agent -- --list-ports`.
+On an Apple-silicon laptop, macOS asks once whether to allow the accessory to connect: click **Allow**.
 
 ```sh
 npm run agent
