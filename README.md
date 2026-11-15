@@ -83,7 +83,7 @@ scripts/build-mac-app.sh
 
 This compiles **GCode Controller.app** for that Mac and installs it in `~/Applications`, where Spotlight
 finds it. Press ⌘Space and type "GCode". It needs the Command Line Tools (`xcode-select --install`),
-which git already uses, and Node 22.
+which git already uses, and Node 22 or later.
 
 - **First launch** asks what the Mac does: **Hub**, **Agent**, or **Agent with simulator**. Change it later
   from the **Server** menu.

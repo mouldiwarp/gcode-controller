@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// The garage Mac runs Monterey, so target Safari 15.
+// Both Macs run Tahoe; Safari 15 stays as a conservative floor for other browsers on the network.
 export default defineConfig({
   plugins: [react()],
   build: {

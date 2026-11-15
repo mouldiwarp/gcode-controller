@@ -8,9 +8,8 @@ Both Macs must be on the same Wi-Fi or LAN.
 
 ## 1. Both Macs: install Node.js and the app
 
-1. Install **Node.js 22 LTS** from <https://nodejs.org> (the macOS installer). Node 22 supports macOS 11
-   Big Sur and later, so it runs on a 2016-era Mac on Monterey. Node 24 needs macOS 13.5, so stay on 22
-   for the garage Mac.
+1. Install **Node.js** 22 or later (the current LTS is fine) from <https://nodejs.org>, using the macOS installer.
+   Both Macs are Apple Silicon on macOS 26 Tahoe, so any current LTS works.
 2. In Terminal:
 
    ```sh
@@ -55,9 +54,10 @@ Add `--sim-speed 5` to make simulated jobs run five times faster.
 
 ### With the machine
 
-1. The FoxAlien controller uses a **CH340** USB-serial chip. The **CH341SER** driver from WCH is already
-   installed on the garage Mac. With it, the machine appears as `/dev/cu.wchusbserial…`. Monterey's
-   built-in driver names it `/dev/cu.usbserial-…`. The agent recognises both.
+1. The FoxAlien controller uses a **CH340** USB-serial chip. macOS has supported it natively since
+   Big Sur, so on the M1 MacBook Pro (Tahoe) no driver is needed. The machine appears as `/dev/cu.usbserial-…`.
+   If you install WCH's **CH341SER** driver anyway (approve its system extension in System Settings), the
+   machine appears as `/dev/cu.wchusbserial…` instead. The agent recognises both.
 2. Plug in the machine, power it on, and check that it's found:
 
    ```sh
@@ -73,7 +73,7 @@ Add `--sim-speed 5` to make simulated jobs run five times faster.
 
    If more than one port is marked, choose one with `--serial /dev/cu.wchusbserial110` (use your port's name).
 
-Or run `scripts/build-mac-app.sh` on this Mac too (it compiles for Intel here) and launch **GCode Controller** from Spotlight, choosing **Agent** or **Agent with simulator**. Click **Allow** when macOS asks about local network access. Or double-click **`Start Agent.command`** (or **`Start Agent (Simulator).command`** while testing). Close its Terminal window to stop the agent.
+Or run `scripts/build-mac-app.sh` on this Mac too (it compiles for this Mac's chip) and launch **GCode Controller** from Spotlight, choosing **Agent** or **Agent with simulator**. Click **Allow** when macOS asks about local network access. Or double-click **`Start Agent.command`** (or **`Start Agent (Simulator).command`** while testing). Close its Terminal window to stop the agent.
 
 ## 4. Open the UI
 

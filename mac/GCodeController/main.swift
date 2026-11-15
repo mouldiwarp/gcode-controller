@@ -6,7 +6,7 @@
 // the server only runs while this app is open.
 //
 // Built by scripts/build-mac-app.sh with plain swiftc (no Xcode project), so it
-// compiles with the Command Line Tools on the Monterey garage Mac too.
+// compiles with just the Command Line Tools. It targets macOS 12+, which covers both Macs.
 
 import AppKit
 
@@ -383,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         guard let node = Paths.node() else {
-            render(.failed("Node.js wasn't found. Install Node 22 LTS from nodejs.org, then press Restart."))
+            render(.failed("Node.js wasn't found. Install Node.js (LTS) from nodejs.org, then press Restart."))
             return
         }
         appendLog("— \(role.title) · \(repo.path) · \(node)\n")
