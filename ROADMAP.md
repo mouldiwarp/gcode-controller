@@ -7,7 +7,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Scaffold: monorepo, README, roadmap, CI | ✅ |
-| 2 | Shared library and GRBL simulator | ⬜ |
+| 2 | Shared library and GRBL simulator | ✅ |
 | 3 | Agent: serial streamer, machine state, job control | ⬜ |
 | 4 | Hub: library, upload API, inbox, Bonjour, sync | ⬜ |
 | 5 | Web UI: DRO, jog, zero, 3D progress, library, console, overrides, macros | ⬜ |
