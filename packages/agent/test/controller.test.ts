@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanLine } from '@gcc/shared';
+import { DEFAULT_CONFIG } from '@gcc/shared';
 import { GrblController } from '../src/controller.ts';
 import { FakeGrbl } from '../src/sim/fakeGrbl.ts';
 
@@ -101,6 +102,22 @@ describe('GrblController', () => {
     await ctl.command({ type: 'goToZero', axes: ['X', 'Y'] });
     await until(() => Math.abs(ctl.machine.wpos[0]) < 1e-6 && ctl.machine.status === 'Idle');
     expect(ctl.machine.wpos[2]).toBeCloseTo(5);
+  });
+
+  it('never lifts past the top of Z when work Z zero is near the top', async () => {
+    await setup();
+    ctl.config = { ...DEFAULT_CONFIG };
+    await ctl.command({ type: 'jog', x: -10, y: -5, z: -0.5, feed: 3000 });
+    await until(() => ctl.machine.mpos[0] === -10 && ctl.machine.status === 'Idle');
+    await ctl.command({ type: 'zero', axes: ['X', 'Y', 'Z'] }); // Z zero 0.5 mm below the top
+    await ctl.command({ type: 'jog', x: 20, z: -30, feed: 3000 });
+    await until(() => Math.abs(ctl.machine.wpos[0] - 20) < 1e-6 && ctl.machine.status === 'Idle');
+    await ctl.command({ type: 'goToZero', axes: ['X'] });
+    await until(() => Math.abs(ctl.machine.wpos[0]) < 1e-6 && ctl.machine.status === 'Idle');
+    expect(ctl.machine.mpos[2]).toBeCloseTo(-1, 3); // 1 mm under the top, not safe Z (+4.5)
+    expect(ctl.machine.wpos[1]).toBeCloseTo(0, 3); // Y untouched
+    // Already above the safe height: Z doesn't move at all.
+    expect(sim.received.filter((l) => l.startsWith('G53G0Z'))).toHaveLength(1);
   });
 
   it('marks the job failed when the USB link drops', async () => {

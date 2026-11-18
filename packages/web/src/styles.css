@@ -532,7 +532,7 @@ label.field {
 
 .dro-row {
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px 1fr auto auto;
   align-items: center;
   gap: 10px;
   padding: 8px 0;

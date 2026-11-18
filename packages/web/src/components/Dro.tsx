@@ -30,6 +30,14 @@ export function DroPanel() {
           <button className="btn small" disabled={locked} onClick={() => run({ type: 'zero', axes: [a] })} title={`Set work ${a} zero here`}>
             Zero
           </button>
+          <button
+            className="btn small ghost"
+            disabled={locked}
+            onClick={() => run({ type: 'goToZero', axes: [a] })}
+            title={a === 'Z' ? 'Move down to Z0' : `Move to ${a}0 (lifting to safe Z first, never past the top of travel)`}
+          >
+            →0
+          </button>
         </div>
       ))}
       <div className="grid-3" style={{ marginTop: 12 }}>
@@ -48,12 +56,17 @@ export function DroPanel() {
           className="btn"
           disabled={locked}
           onClick={() => run({ type: 'goToZero', axes: ['X', 'Y'] })}
-          title={`Lift to Z${s.config.safeZ} (or stay higher), then move to X0 Y0`}
+          title={`Lift to Z${s.config.safeZ} (or stay higher, never past the top of travel), then move to X0 Y0`}
         >
           Go to XY0
         </button>
-        <button className="btn" disabled={locked} onClick={() => run({ type: 'goToZero', axes: ['Z'] })} title="Move down to Z0">
-          Go to Z0
+        <button
+          className="btn"
+          disabled={locked}
+          onClick={() => run({ type: 'goToZero', axes: ['X', 'Y', 'Z'] })}
+          title="Lift to safe Z, move to X0 Y0, then down to Z0"
+        >
+          Go to XYZ0
         </button>
         <button
           className="btn outline-gold"

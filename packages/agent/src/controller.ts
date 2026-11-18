@@ -576,12 +576,22 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         idle('move');
         const safeZ = this.config?.safeZ ?? 5;
         if (cmd.axes.includes('X') || cmd.axes.includes('Y')) {
-          const liftTo = Math.max(this.machine.wpos[2], safeZ);
-          await run(`G90G0Z${fmt(liftTo)}`);
+          // Lift to the safe height above work zero first, but only ever up, and never closer
+          // than 1 mm to the top of Z travel (with soft limits off, GRBL would drive into the
+          // limit switch: a Z zero near the top puts "safe Z" past it).
+          const top = (this.config?.envelope.max[2] ?? 0) - 1;
+          const mz = this.machine.mpos[2];
+          const target = Math.min(this.machine.wco[2] + safeZ, top);
+          if (target > mz + 0.001) await run(`G53G0Z${fmt(target)}`);
           const xy = cmd.axes.filter((a) => a !== 'Z').map((a) => `${a}0`).join('');
           await run(`G90G0${xy}`);
         }
-        if (cmd.axes.includes('Z')) await run('G90G0Z0');
+        if (cmd.axes.includes('Z')) {
+          if (this.machine.wco[2] > (this.config?.envelope.max[2] ?? 0) + 0.001) {
+            throw new Error('Work Z zero is above the top of Z travel. Zero Z on the stock (or probe) first');
+          }
+          await run('G90G0Z0');
+        }
         return;
       }
       case 'mdi': {
