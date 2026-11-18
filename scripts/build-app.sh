@@ -7,7 +7,7 @@
 #
 # Needs Xcode (or its Command Line Tools) for Swift 6.2. It never adds a login item: open the app
 # yourself. It's still called "GCode Controller 2.0" (the name macOS's permissions are attached to);
-# it becomes "GCode Controller" when it's signed with a Developer ID.
+# it becomes "KerfLine" when it's signed with a Developer ID.
 #
 # The new copy is only installed if the build succeeds, so a failed update leaves the old one.
 set -euo pipefail
