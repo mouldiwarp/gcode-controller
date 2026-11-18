@@ -40,7 +40,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 - ⬜ Probe X/Y corners with the touch plate (corner-finding), as WorkBee's XYZ probe block does.
 - ⬜ Remember the probe result per group, and warn on Start next if Z wasn't re-probed after the bit change.
 - ⬜ **Continuous jog:** hold a button or key to jog, release to stop (`$J=` plus jog cancel).
-- ⬜ **Resume from line N** after a stop, with a safe preamble (spindle on, move to safe Z, then XY, then down).
+- ✅ **Resume from line N** after a stop, with a safe preamble (modes, safe Z, XY, spindle on and spin-up, then down). Defaults to the line the cutter was on. Spindle stop/start while paused.
 - ⬜ **Check mode** (`$C`) dry run, which streams the file through GRBL's parser without moving, to catch
   errors before cutting.
 - ⬜ **Block a start** when the toolpath goes outside the machine travel. Today the UI only warns.

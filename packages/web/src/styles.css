@@ -1577,3 +1577,32 @@ label.field {
   background: var(--obsidian);
   font-size: 13px;
 }
+
+/* ---- Pause and resume ---- */
+
+.resume-box {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(197, 160, 89, 0.08);
+  font-size: 13px;
+}
+
+.resume-lines {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--obsidian);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  margin: 8px 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.resume-lines .here {
+  color: var(--gold);
+}

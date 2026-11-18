@@ -22,6 +22,8 @@ export interface MachineState {
   overrides: { feed: number; rapid: number; spindle: number };
   buffer?: { planner: number; rx: number };
   pins?: string;
+  /** Spindle/coolant state from the status report's A: field ('S' clockwise, 'C' counter, 'F' flood, 'M' mist). */
+  accessories?: string;
   alarm?: { code: number; message: string };
   /** Last `error:N` received outside a job, for the toast. */
   lastError?: { code: number; message: string; line?: string };
@@ -74,6 +76,10 @@ export interface JobState {
   estSeconds?: number;
   error?: string;
   group?: JobGroup;
+  /** Stream line this run started from (0 unless resumed part way). */
+  firstLine?: number;
+  /** After a stop or failure: the stream line the cutter was on, to resume from. */
+  resumeLine?: number;
 }
 
 export interface LibraryItem {
@@ -254,7 +260,15 @@ export type Command =
   | { type: 'goToZero'; axes: ('X' | 'Y' | 'Z')[] }
   | { type: 'mdi'; line: string }
   | { type: 'runMacro'; id: string }
-  | { type: 'start'; fileId: string; /** Run the rest of the file's group after it. */ group?: boolean }
+  | {
+      type: 'start';
+      fileId: string;
+      /** Run the rest of the file's group after it. */
+      group?: boolean;
+      /** Resume from this stream line (0-based): restore the modes, move over the start point and carry on. */
+      fromLine?: number;
+    }
+  | { type: 'spindleStop' }
   | { type: 'startNext' }
   | { type: 'probeZ' }
   | { type: 'stop' }

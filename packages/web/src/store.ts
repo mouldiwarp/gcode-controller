@@ -24,6 +24,7 @@ interface Store {
   probeOpen: boolean;
   managerOpen: boolean;
   surfacingOpen: boolean;
+  resumeOpen: boolean;
   /** The start confirmation is for the next file of a group. */
   confirmNext: boolean;
   version: number;
@@ -37,6 +38,7 @@ interface Store {
   setProbeOpen: (open: boolean) => void;
   setManagerOpen: (open: boolean) => void;
   setSurfacingOpen: (open: boolean) => void;
+  setResumeOpen: (open: boolean) => void;
   askStartNext: (open: boolean) => void;
 }
 
@@ -61,6 +63,7 @@ export const useStore = create<Store>((set, get) => ({
   probeOpen: false,
   managerOpen: false,
   surfacingOpen: false,
+  resumeOpen: false,
   confirmNext: false,
   version: 0,
 
@@ -103,6 +106,7 @@ export const useStore = create<Store>((set, get) => ({
   setProbeOpen: (open) => set({ probeOpen: open }),
   setManagerOpen: (open) => set({ managerOpen: open }),
   setSurfacingOpen: (open) => set({ surfacingOpen: open }),
+  setResumeOpen: (open) => set({ resumeOpen: open }),
   askStartNext: (open) => {
     const s = get().state;
     const g = s?.job.group;

@@ -300,7 +300,7 @@ export class Agent {
           this.update(by);
           break;
         case 'start':
-          await this.startJob(cmd.fileId, by, cmd.group);
+          await this.startJob(cmd.fileId, by, cmd.group, cmd.fromLine);
           break;
         case 'startNext':
           await this.startNext(by);
@@ -372,7 +372,7 @@ export class Agent {
     return this.library.filter((f) => f.group === name).sort((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
   }
 
-  private async startJob(fileId: string, by: string, runGroup = false): Promise<void> {
+  private async startJob(fileId: string, by: string, runGroup = false, fromLine?: number): Promise<void> {
     if (this.controller.job.status === 'toolchange') {
       throw new Error('A group is waiting for a bit change. Use Start next, or End group first');
     }
@@ -389,7 +389,7 @@ export class Agent {
         prefetch = all.slice(index);
       }
     }
-    await this.load(item, prefetch, by, group);
+    await this.load(item, prefetch, by, group, fromLine);
   }
 
   /** After a bit change: start the next file of the group. */
@@ -408,7 +408,7 @@ export class Agent {
    * Fetch every file the run needs (a whole group up front, so a Wi-Fi dropout
    * between files can't strand it), then start streaming the first.
    */
-  private async load(item: LibraryItem, prefetch: LibraryItem[], by: string, group?: JobGroup): Promise<void> {
+  private async load(item: LibraryItem, prefetch: LibraryItem[], by: string, group?: JobGroup, fromLine?: number): Promise<void> {
     const previous = this.controller.job;
     this.controller.markLoading(item.id, item.name, by);
     let text = '';
@@ -431,7 +431,12 @@ export class Agent {
       else this.controller.cancelLoading((err as Error).message);
       throw err;
     }
-    this.controller.startJob(text, { fileId: item.id, fileName: item.name, by, estSeconds: item.estSeconds, group });
+    try {
+      this.controller.startJob(text, { fileId: item.id, fileName: item.name, by, estSeconds: item.estSeconds, group, fromLine });
+    } catch (err) {
+      this.controller.cancelLoading((err as Error).message);
+      throw err;
+    }
   }
 
   /** Read a file from the local cache, or download it from the hub and verify it. */

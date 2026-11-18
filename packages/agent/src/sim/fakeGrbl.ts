@@ -80,6 +80,8 @@ export class FakeGrbl implements Transport {
   private planner: Block[] = [];
   private interp: Interpreter;
   private spindleOn = false;
+  /** Spindle stopped by the spindle-stop override during a hold. */
+  spindleStopped = false;
   private spindleSpeed = 0;
   private feedOv = 100;
   private rapidOv = 100;
@@ -229,6 +231,7 @@ export class FakeGrbl implements Transport {
         return true;
       case 0x7e: // ~ cycle start
         if (this.state === 'Hold') {
+          this.spindleStopped = false; // the spindle comes back on before motion resumes
           this.state = this.planner.length ? 'Run' : 'Idle';
           this.holdComplete = false;
         }
@@ -258,6 +261,7 @@ export class FakeGrbl implements Transport {
   private override(code: number): void {
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
     switch (code) {
+      case 0x9e: if (this.state === 'Hold' && this.holdComplete) this.spindleStopped = !this.spindleStopped; break;
       case 0x90: this.feedOv = 100; break;
       case 0x91: this.feedOv = clamp(this.feedOv + 10, 10, 200); break;
       case 0x92: this.feedOv = clamp(this.feedOv - 10, 10, 200); break;
@@ -280,6 +284,7 @@ export class FakeGrbl implements Transport {
     this.planner = [];
     this.interp.reset();
     this.spindleOn = false;
+    this.spindleStopped = false;
     this.holdComplete = false;
     this.pendingOkAfterHome = false;
     this.homingRemaining = 0;
@@ -302,9 +307,11 @@ export class FakeGrbl implements Transport {
     if (this.state === 'Hold') state = this.holdComplete ? 'Hold:0' : 'Hold:1';
     const block = this.planner[0];
     const feed = block && (this.state === 'Run' || this.state === 'Jog') ? this.effectiveFeed(block) : 0;
-    const speed = this.spindleOn ? Math.round((this.spindleSpeed * this.spindleOv) / 100) : 0;
+    const spinning = this.spindleOn && !this.spindleStopped;
+    const speed = spinning ? Math.round((this.spindleSpeed * this.spindleOv) / 100) : 0;
     let s = `<${state}|MPos:${p}|Bf:${this.opts.plannerSize - this.planner.length},${this.opts.rxSize - this.rx.length}|FS:${Math.round(feed)},${speed}`;
     if (this.probeTouching()) s += '|Pn:P';
+    if (spinning) s += '|A:S';
     const wco = this.wco.map(f).join(',');
     const ov = `${this.feedOv},${this.rapidOv},${this.spindleOv}`;
     this.reportCount++;

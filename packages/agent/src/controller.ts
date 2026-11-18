@@ -11,6 +11,8 @@ import {
   describeError,
   initialJob,
   initialMachine,
+  isMotionLine,
+  planResume,
   streamableLines,
   type Command,
   type ConsoleLine,
@@ -61,6 +63,14 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   private inflightBytes = 0;
   private rxSize = 128;
   private jobLines: { text: string; source: number }[] = [];
+  /** Job lines (preamble included) GRBL has acknowledged in this run. */
+  private jobAcked = 0;
+  /** Preamble lines at the front of jobLines (a resume). */
+  private jobPreamble = 0;
+  /** Latest buffer report, to tell which line the cutter is on. */
+  private lastBuf?: { planner: number; rx: number };
+  /** jobAcked when that buffer report arrived. */
+  private jobAckedAtStatus = 0;
   private jobCursor = 0;
   /** Stop feeding job lines (pause-on-error). Hold alone keeps the buffer topped up. */
   private jobSuspended = false;
@@ -262,9 +272,13 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     }
     if (s.buffer) {
       patch.buffer = s.buffer;
+      this.lastBuf = s.buffer;
+      // GRBL sends replies in order, so this report counts exactly the lines acknowledged so far.
+      this.jobAckedAtStatus = this.jobAcked;
       this.checkForLostReplies(s.state, s.buffer);
     }
     patch.pins = s.pins;
+    patch.accessories = s.accessories;
     if (s.state !== 'Alarm' && this.machine.alarm) patch.alarm = undefined;
     if (this.machine.connection === 'connecting') {
       // Boards that don't reset when the port opens (no banner) come up through a status
@@ -305,11 +319,16 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     const errorText = ok ? undefined : `${raw}: ${describeError(code!)}`;
 
     if (item.kind === 'job') {
-      this.job.ackedLines++;
-      this.job.sourceLine = item.source ?? this.job.sourceLine;
+      this.jobAcked++;
+      const preamble = item.source === -1;
+      if (!preamble) {
+        this.job.ackedLines++;
+        this.job.sourceLine = item.source ?? this.job.sourceLine;
+      }
       if (!ok) {
-        this.log('error', `Line ${(item.source ?? 0) + 1} "${item.text}" → ${errorText}`);
-        this.pauseOnError(`Line ${(item.source ?? 0) + 1} (${item.text}) → ${errorText}`);
+        const where = preamble ? 'Resume set-up' : `Line ${(item.source ?? 0) + 1}`;
+        this.log('error', `${where} "${item.text}" → ${errorText}`);
+        this.pauseOnError(`${where} (${item.text}) → ${errorText}`);
       }
       this.scheduleJobEmit();
     } else {
@@ -413,9 +432,27 @@ export class GrblController extends EventEmitter<ControllerEvents> {
 
   // ---------------- Jobs ----------------
 
-  startJob(text: string, meta: { fileId: string; fileName: string; by?: string; estSeconds?: number; group?: JobGroup }): void {
+  startJob(
+    text: string,
+    meta: { fileId: string; fileName: string; by?: string; estSeconds?: number; group?: JobGroup; fromLine?: number },
+  ): void {
     const lines = streamableLines(text);
-    this.jobLines = lines;
+    const from = Math.max(0, Math.floor(meta.fromLine ?? 0));
+    if (from >= lines.length) throw new Error(`The file has only ${lines.length} lines`);
+    let preamble: string[] = [];
+    if (from > 0) {
+      const plan = planResume(text, from, {
+        travelZ: this.travelZ(),
+        spinup: 4,
+        plungeFeed: Math.min(300, this.config?.jogFeedZ ?? 300),
+      });
+      preamble = plan.preamble;
+      for (const w of plan.state.warnings) this.log('info', `Resume: ${w}`, meta.by);
+    }
+    this.jobLines = [...preamble.map((t) => ({ text: t, source: -1 })), ...lines.slice(from)];
+    this.jobPreamble = preamble.length;
+    this.jobAcked = 0;
+    this.jobAckedAtStatus = 0;
     this.jobCursor = 0;
     this.jobSuspended = false;
     this.job = {
@@ -424,16 +461,48 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       fileId: meta.fileId,
       fileName: meta.fileName,
       totalLines: lines.length,
+      ackedLines: from,
+      firstLine: from,
       startedAt: Date.now(),
       startedBy: meta.by,
-      estSeconds: meta.estSeconds,
+      estSeconds: meta.estSeconds ? (meta.estSeconds * (lines.length - from)) / lines.length : undefined,
       group: meta.group,
     };
     this.emit('job', this.job);
     const g = meta.group;
     const part = g ? ` [${g.name}: file ${g.index + 1} of ${g.files.length}]` : '';
-    this.log('info', `Job started: ${meta.fileName} (${lines.length} lines)${part}${meta.by ? ` by ${meta.by}` : ''}`);
+    const at = from > 0 ? `, resuming at line ${from + 1} of ${lines.length}` : ` (${lines.length} lines)`;
+    this.log('info', `Job started: ${meta.fileName}${at}${part}${meta.by ? ` by ${meta.by}` : ''}`);
     this.pump();
+  }
+
+  /** Work Z to travel at between cuts: safe Z, but never within 1 mm of the top of travel. */
+  private travelZ(): number {
+    const safeZ = this.config?.safeZ ?? 5;
+    const top = (this.config?.envelope.max[2] ?? 0) - 1;
+    return Math.min(safeZ, top - this.machine.wco[2]);
+  }
+
+  /**
+   * The stream line the cutter is on: the last acknowledged lines are still queued in
+   * GRBL's planner, so walk back over as many moves as it holds. Arcs take several planner
+   * blocks per line, which only moves the answer earlier (re-cutting, never skipping).
+   */
+  private currentLine(): number | undefined {
+    if (!this.jobLines.length || !this.job.fileId) return undefined;
+    const free = this.lastBuf?.planner;
+    const used = free === undefined ? 0 : Math.max(0, this.maxPlannerFree - free);
+    // Pair the planner count with the acknowledgements it was reported against. The cutter
+    // may have moved on since, which only makes the answer earlier (safe).
+    let i = this.lastBuf ? this.jobAckedAtStatus : this.jobAcked;
+    let moves = 0;
+    while (i > 0 && moves < used) {
+      i--;
+      if (isMotionLine(this.jobLines[i].text)) moves++;
+    }
+    const first = this.job.firstLine ?? 0;
+    const line = first + Math.max(0, i - this.jobPreamble);
+    return Math.min(line, this.job.totalLines - 1);
   }
 
   private pauseOnError(message: string): void {
@@ -447,6 +516,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   }
 
   private failJob(message: string): void {
+    if (this.isJobActive) this.job.resumeLine = this.currentLine();
     this.jobSuspended = true;
     this.job.status = 'error';
     this.job.error = message;
@@ -565,6 +635,13 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         return;
       case 'stop':
         return this.stopJob(by);
+      case 'spindleStop':
+        need();
+        // GRBL only takes this once a feed hold has completed; it toggles, and Resume turns it back on.
+        if (this.machine.status !== 'Hold' || this.machine.subState !== 0) throw new Error('Pause the job first, then wait for it to stop moving');
+        this.log('out', this.machine.accessories?.includes('S') || this.machine.accessories?.includes('C') ? '[spindle stop]' : '[spindle restart]', by);
+        this.realtime(RT.SPINDLE_STOP);
+        return;
       case 'jog': {
         idle('jog');
         const parts = ['$J=G91G21'];
@@ -750,6 +827,8 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     this.jobSuspended = true;
     const wasActive = this.isJobActive;
     if (wasActive) {
+      // Before the reset clears GRBL's queue: which line the cutter is on, to resume from.
+      this.job.resumeLine = this.currentLine();
       this.job.status = 'stopping';
       this.emit('job', this.job);
     }

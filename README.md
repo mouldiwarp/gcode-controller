@@ -184,6 +184,18 @@ start dialog offers to run the rest of the group in order. After each file the s
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
 the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
+## Dealing with a problem mid-cut
+
+- **Pause** stops the motion and leaves the spindle running. The Job panel then offers **Stop spindle**. **Resume** spins it back up, waits for it, and carries on.
+- GRBL can't jog while paused. To move the cutter away (clear chips, free a part, change a broken bit), press **Stop**. The job remembers the line the cutter was on, which is earlier than the line count because GRBL queues moves ahead.
+- When you are ready, use **Resume from line…** in the Job panel. It shows the program around that line, and you can go back a line or two if unsure. It then:
+  1. restores the program's modes (units, distance mode, plane, work offset);
+  2. lifts to safe Z and moves over the start of that line;
+  3. starts the spindle and waits 4 s;
+  4. lowers onto the cut at 300 mm/min;
+  5. continues streaming.
+- If the machine alarmed or was switched off, home it first. Work zero is kept. Don't re-probe Z unless the bit changed.
+
 ## Surfacing the spoilboard
 
 **Library → Surface…** makes a program to flatten the spoilboard:

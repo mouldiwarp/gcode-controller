@@ -8,6 +8,7 @@ export function JobPanel() {
   const askStart = useStore((x) => x.askStart);
   const askStartNext = useStore((x) => x.askStartNext);
   const setProbeOpen = useStore((x) => x.setProbeOpen);
+  const setResumeOpen = useStore((x) => x.setResumeOpen);
   const next = nextGroupFile(s);
   const ready = machineReady(s);
   const job = s.job;
@@ -90,6 +91,20 @@ export function JobPanel() {
       )}
       {startHint && !active && !next && <div className="muted" style={{ fontSize: 12, marginTop: 6, textAlign: 'center' }}>{startHint}</div>}
 
+      {job.status === 'paused' && <PausedBox />}
+
+      {!active && !next && (job.status === 'stopped' || job.status === 'error') && job.resumeLine !== undefined && s.library.some((f) => f.id === job.fileId) && (
+        <div className="resume-box">
+          <div>
+            Stopped at line <b>{(job.resumeLine + 1).toLocaleString()}</b> of {job.totalLines.toLocaleString()} of {job.fileName}.
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>Deal with the problem (jog, clear chips, change the bit), then carry on from where it stopped.</div>
+          <button className="btn outline-gold" disabled={!ready || s.machine.status !== 'Idle'} onClick={() => setResumeOpen(true)}>
+            Resume from line…
+          </button>
+        </div>
+      )}
+
       <div className="eyebrow" style={{ marginTop: 16 }}>
         Overrides
       </div>
@@ -108,6 +123,32 @@ export function JobPanel() {
         ))}
       </div>
     </section>
+  );
+}
+
+/** While paused: stop the spindle (GRBL restarts it, and waits for it, on Resume), or Stop to move away. */
+function PausedBox() {
+  const s = useStore((x) => x.state)!;
+  const run = useStore((x) => x.run);
+  const m = s.machine;
+  const settled = m.status === 'Hold' && m.subState === 0;
+  const spinning = !!m.accessories && /[SC]/.test(m.accessories);
+  return (
+    <div className="resume-box">
+      <div className="row" style={{ gap: 8 }}>
+        <span>{!settled ? 'Slowing to a stop…' : spinning ? 'Paused. The spindle is still running.' : 'Paused, spindle stopped.'}</span>
+        <span className="spacer" />
+        <button className="btn small" disabled={!settled} onClick={() => run({ type: 'spindleStop' })}>
+          {spinning || !settled ? 'Stop spindle' : 'Start spindle'}
+        </button>
+      </div>
+      <div className="muted" style={{ fontSize: 12 }}>
+        {spinning || !settled
+          ? 'Resume carries on from here.'
+          : 'Resume starts the spindle and waits for it to reach speed before moving.'}{' '}
+        GRBL can't jog while paused: to move the cutter away, press Stop, then Resume from line… afterwards.
+      </div>
+    </div>
   );
 }
 

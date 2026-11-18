@@ -11,7 +11,6 @@ interface Loaded {
 }
 
 const cache = new Map<string, Loaded>();
-const GRBL_PLANNER = 15;
 
 async function loadProgram(id: string, sha: string, rapidRate: number): Promise<Loaded> {
   const hit = cache.get(sha);
@@ -75,14 +74,21 @@ export function Visualizer() {
 
   // Colour what has been cut. GRBL acknowledges lines when they are planned,
   // not when they're cut, so step back by the blocks still in the planner.
+  // The planner's size is the most free blocks it has reported (15 on classic GRBL, 35 on FoxAlien's).
+  const plannerSize = useRef(15);
+  if (s.machine.buffer) plannerSize.current = Math.max(plannerSize.current, s.machine.buffer.planner);
   const doneLine = useMemo(() => {
     if (!loaded || !showingJob) return -1;
     if (job.status === 'done') return Number.MAX_SAFE_INTEGER;
-    const inPlanner = s.machine.buffer ? Math.max(0, GRBL_PLANNER - s.machine.buffer.planner) : 0;
+    if (job.status === 'stopped' || job.status === 'error') {
+      // Show what was really cut: up to the line it can resume from.
+      if (job.resumeLine !== undefined) return job.resumeLine > 0 ? (loaded.streamSources[job.resumeLine - 1] ?? -1) : -1;
+    }
+    const inPlanner = s.machine.buffer ? Math.max(0, plannerSize.current - s.machine.buffer.planner) : 0;
     const executed = Math.max(0, job.ackedLines - inPlanner);
     if (executed === 0) return -1;
     return loaded.streamSources[Math.min(executed, loaded.streamSources.length) - 1] ?? -1;
-  }, [loaded, showingJob, job.status, job.ackedLines, s.machine.buffer]);
+  }, [loaded, showingJob, job.status, job.ackedLines, job.resumeLine, s.machine.buffer]);
 
   useEffect(() => {
     sceneRef.current?.setProgress(doneLine);

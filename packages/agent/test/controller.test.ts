@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanLine } from '@gcc/shared';
-import { DEFAULT_CONFIG } from '@gcc/shared';
+import { DEFAULT_CONFIG, stateAt, streamableLines } from '@gcc/shared';
 import { GrblController } from '../src/controller.ts';
 import { FakeGrbl } from '../src/sim/fakeGrbl.ts';
 
@@ -118,6 +118,52 @@ describe('GrblController', () => {
     expect(ctl.machine.wpos[1]).toBeCloseTo(0, 3); // Y untouched
     // Already above the safe height: Z doesn't move at all.
     expect(sim.received.filter((l) => l.startsWith('G53G0Z'))).toHaveLength(1);
+  });
+
+  it('remembers where a stopped job got to and resumes from there', async () => {
+    await setup({ speed: 5 });
+    ctl.config = { ...DEFAULT_CONFIG };
+    const text = program();
+    const lines = streamableLines(text);
+    ctl.startJob(text, { fileId: 'f1', fileName: 'pocket.nc' });
+    await until(() => ctl.job.ackedLines > 30 && ctl.machine.status === 'Run', 15000);
+    await ctl.command({ type: 'stop' }, 'garage');
+    await until(() => ctl.job.status === 'stopped');
+    await until(() => ctl.machine.status === 'Idle');
+    const stopped = [...ctl.machine.wpos] as [number, number, number];
+    const resume = ctl.job.resumeLine!;
+    expect(resume).toBeGreaterThan(5);
+    // Never past the line the cutter was on: the stop position lies on or after the resume line's start.
+    const at = stateAt(text, resume).pos;
+    const next = stateAt(text, resume + 1).pos;
+    const onOrBefore = (p: (number | null)[]) => (p[1] as number) <= stopped[1] + 1e-6;
+    expect(onOrBefore(at)).toBe(true);
+    expect((next[1] as number) >= stopped[1] - 0.6).toBe(true); // within a line or so
+
+    const before = sim.received.length;
+    ctl.startJob(text, { fileId: 'f1', fileName: 'pocket.nc', fromLine: resume });
+    expect(ctl.job.ackedLines).toBe(resume);
+    await until(() => ctl.job.status === 'done', 30000);
+    const sent = sim.received.slice(before);
+    expect(sent[0]).toBe('G21G90G17G94G54');
+    expect(sent).toContain('M3S12000');
+    expect(sent.slice(-lines.length + resume)).toEqual(lines.slice(resume).map((l) => l.text));
+    expect(ctl.job.ackedLines).toBe(ctl.job.totalLines);
+  }, 60000);
+
+  it('stops and restarts the spindle while paused', async () => {
+    await setup({ speed: 2 });
+    ctl.startJob(program(), { fileId: 'f1', fileName: 'pocket.nc' });
+    await until(() => ctl.machine.accessories === 'S' && ctl.machine.status === 'Run');
+    await ctl.command({ type: 'hold' });
+    await until(() => ctl.machine.status === 'Hold' && ctl.machine.subState === 0);
+    await ctl.command({ type: 'spindleStop' });
+    await until(() => !ctl.machine.accessories);
+    expect(ctl.machine.spindle).toBe(0);
+    await ctl.command({ type: 'resume' });
+    await until(() => ctl.machine.accessories === 'S');
+    await ctl.command({ type: 'stop' });
+    await until(() => ctl.job.status === 'stopped');
   });
 
   it('marks the job failed when the USB link drops', async () => {
