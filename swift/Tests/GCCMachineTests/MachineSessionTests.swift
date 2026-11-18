@@ -163,15 +163,23 @@ func program() -> String {
         }
         try await wait(150)
         // GRBL has taken nearly every line, but the cutter is still on the long one.
-        var job = await r.job
+        let job = await r.job
         #expect(job.ackedLines > 12) // the sim queues 15 moves
         #expect(job.cuttingLine == 2)
         #expect(job.percent > 20 && job.percent < 80)
         // It advances with the tool along the cut: 1 mm of X is 0.1 s at F600.
-        let (d1, x1) = (job.doneSeconds ?? 0, await r.machine.wpos[0])
+        // Job and position from the same status report (one arriving between the reads would skew it).
+        func sample() async throws -> (Double, Double) {
+            while true {
+                let before = await r.machine.wpos[0]
+                let done = await r.job.doneSeconds ?? 0
+                if await r.machine.wpos[0] == before { return (done, before) }
+                try await wait(20)
+            }
+        }
+        let (d1, x1) = try await sample()
         try await wait(300)
-        job = await r.job
-        let (d2, x2) = (job.doneSeconds ?? 0, await r.machine.wpos[0])
+        let (d2, x2) = try await sample()
         #expect(d2 > d1)
         #expect(abs(d2 - d1 - (x2 - x1) / 10) < 0.6)
         try await until(15000) { await r.job.status == .done }

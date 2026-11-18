@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "GCCCore", targets: ["GCCCore"]),
         .library(name: "GCCMachine", targets: ["GCCMachine"]),
+        .library(name: "GCCLibrary", targets: ["GCCLibrary"]),
         .executable(name: "gcc", targets: ["gcc"]),
     ],
     targets: [
@@ -15,9 +16,12 @@ let package = Package(
         .target(name: "GCCCore"),
         // The machine: USB serial, the GRBL simulator, and the streaming session (1.0's controller).
         .target(name: "GCCMachine", dependencies: ["GCCCore"]),
+        // The file library: blobs, SQLite, the Finder folder working copy, history, Trash, 1.0 import.
+        .target(name: "GCCLibrary", dependencies: ["GCCCore"], linkerSettings: [.linkedLibrary("sqlite3")]),
         // Headless sender: `gcc ports`, `gcc stream [--simulate | --port P] file.nc`.
         .executableTarget(name: "gcc", dependencies: ["GCCMachine"]),
         .testTarget(name: "GCCCoreTests", dependencies: ["GCCCore"]),
         .testTarget(name: "GCCMachineTests", dependencies: ["GCCMachine"]),
+        .testTarget(name: "GCCLibraryTests", dependencies: ["GCCLibrary"]),
     ]
 )

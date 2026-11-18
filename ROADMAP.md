@@ -41,7 +41,7 @@ swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected 
 |---|---|---|
 | 1 | Core: G-code, GRBL protocol, state and commands, resume, progress, travel, surfacing, settings check (ported and checked identical to 1.0) | ✅ |
 | 2 | Machine: serial port, simulator, streaming session (1.0's controller tests all ported), `gcc` command-line streamer. Real-machine air cut with `gcc stream` still to do | ✅ |
-| 3 | Library on disk: blobs, SQLite, Finder folder, history, Trash, 1.0 import | ⬜ |
+| 3 | Library on disk: content blobs, SQLite with a per-field change log, Finder folder kept in step both ways (moves keep their id), 5 versions / 30 days of history, a 30-day Trash, 1.0 import | ✅ |
 | 4 | Network and sync: hub API (Swarf/Fretboard unchanged), Bonjour, link between the Macs, library sync and conflicts | ⬜ |
 | 5 | App shell: role picker, main window, panels, library UI with conflicts | ⬜ |
 | 6 | Metal 3D view and every dialog | ⬜ |
