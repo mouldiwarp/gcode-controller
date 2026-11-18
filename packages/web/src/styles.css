@@ -73,8 +73,9 @@ textarea {
 
 .main {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 360px;
-  gap: var(--gap);
+  grid-template-columns: 300px minmax(0, 1fr) 8px var(--right-w, 360px);
+  column-gap: calc(var(--gap) - 4px);
+  row-gap: var(--gap);
   padding: var(--gap);
   min-height: 0;
 }
@@ -93,9 +94,39 @@ textarea {
   overflow: hidden;
 }
 
+/* Drag to widen the right-hand column. */
+.col-resizer {
+  cursor: col-resize;
+  border-radius: 4px;
+  position: relative;
+  touch-action: none;
+}
+.col-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 2px;
+  height: 36px;
+  margin-top: -18px;
+  border-radius: 1px;
+  background: var(--line);
+}
+.col-resizer:hover::after,
+.col-resizer.dragging::after {
+  background: var(--gold);
+  top: 0;
+  height: 100%;
+  margin-top: 0;
+}
+
 @media (max-width: 1180px) {
   .main {
     grid-template-columns: 280px minmax(0, 1fr);
+    column-gap: var(--gap);
+  }
+  .col-resizer {
+    display: none;
   }
   .col.right {
     grid-column: 1 / -1;
@@ -632,9 +663,7 @@ label.field {
 .viz-file .name {
   font-weight: 600;
   color: var(--white);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .viz-views {
@@ -777,12 +806,13 @@ label.field {
 .job-file .name {
   font-weight: 600;
   color: var(--white);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .ov-row {
   display: grid;
   grid-template-columns: 62px auto 52px auto;
+  justify-content: start;
   align-items: center;
   gap: 6px;
   margin-top: 8px;
@@ -845,10 +875,8 @@ label.field {
 
 .file .name {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: var(--white);
+  overflow-wrap: anywhere;
 }
 
 .file .meta {
@@ -1266,10 +1294,8 @@ label.field {
 .folder-name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .folder-count {
@@ -1426,9 +1452,7 @@ label.field {
 .mfile .name {
   font-weight: 600;
   color: var(--white);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .mfile .meta {

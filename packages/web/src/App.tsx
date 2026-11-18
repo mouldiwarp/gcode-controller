@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { connect, useStore } from './store.ts';
 import { TopBar, Banners } from './components/TopBar.tsx';
 import { UpdateBanner } from './components/UpdateBanner.tsx';
@@ -14,10 +14,12 @@ import { SettingsDialog } from './components/Settings.tsx';
 import { ProbeDialog } from './components/ProbeDialog.tsx';
 import { LibraryManager } from './components/LibraryManager.tsx';
 import { Toasts } from './components/Toasts.tsx';
+import { ColumnResizer } from './components/ColumnResizer.tsx';
 
 export function App() {
   const state = useStore((s) => s.state);
   const socket = useStore((s) => s.socket);
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     connect();
@@ -39,7 +41,7 @@ export function App() {
         <UpdateBanner />
         <Banners />
       </div>
-      <main className="main">
+      <main className="main" ref={mainRef}>
         <div className="col left">
           <DroPanel />
           <JogPanel />
@@ -48,6 +50,7 @@ export function App() {
           <Visualizer />
           <ProgressPanel />
         </div>
+        <ColumnResizer main={mainRef} />
         <div className="col right">
           <JobPanel />
           <LibraryPanel />
