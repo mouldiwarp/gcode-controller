@@ -52,7 +52,7 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
 | 5 | App shell: role picker (with a trial mode that leaves 1.0 alone), main window with every panel except 3D, keyboard jog, menus, toasts, library manager (folders, version history, Trash), conflict badges and dialog. Agent-alone-when-hub-is-down not yet tried on two Macs | ✅ |
 | 6 | Metal 3D view and every dialog | ✅ |
 | 7 | Build, install and self-update: `scripts/build-app.sh`, update from git (either Mac can update the other), keep-awake while it owns the machine | ✅ |
-| 8 | Cut-over on both Macs, real-machine checks, tag v2.0 | ⬜ |
+| 8 | Cut-over on both Macs, real-machine checks, tag v2.0. Two-Mac rehearsal (trial mode, simulator) passed: 1.0 library import, sync both ways including Finder drops and deletes, a job on the garage driven from the hub with hold/resume, stop and resume from a line, and the hub quit mid-job (the garage finished on time and the hub relinked). Still to do on the FoxAlien: home, start-up settings check, probe, a surfacing pass, pause/resume, stop and resume from a line. Then switch both Macs out of trial, remove 1.0 and tag | 🔶 |
 | 9 | Later: signed, notarized DMG | 💡 |
 
 ## Next up
