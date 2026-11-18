@@ -1,6 +1,6 @@
 {
   "name": "gcode-controller",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Networked GRBL sender: a hub on your design Mac, a USB agent next to the machine, and a synced browser UI on both.",
   "license": "MIT",
