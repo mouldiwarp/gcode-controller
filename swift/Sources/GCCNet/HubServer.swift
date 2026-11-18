@@ -9,6 +9,7 @@
 //   GET    /api/files/:id            one item
 //   GET    /api/files/:id/content    the G-code
 //   DELETE /api/files/:id            move it to the Trash
+//   POST   /api/command              body = a Command as JSON; from this Mac only (scripts, rehearsals)
 
 import Foundation
 import GCCCore
@@ -19,7 +20,23 @@ import HummingbirdWebSocket
 import Logging
 import NIOCore
 
-typealias HubContext = BasicWebSocketRequestContext
+/// The request context, with the caller's address (commands are taken from this Mac only).
+struct HubContext: RequestContext, WebSocketRequestContext, RemoteAddressRequestContext {
+    var coreContext: CoreRequestContextStorage
+    let webSocket: WebSocketHandlerReference<HubContext>
+    let remoteAddress: SocketAddress?
+
+    init(source: ApplicationRequestContextSource) {
+        coreContext = .init(source: source)
+        webSocket = .init()
+        remoteAddress = source.channel.remoteAddress
+    }
+
+    var fromThisMac: Bool {
+        guard let ip = remoteAddress?.ipAddress else { return false }
+        return ip == "127.0.0.1" || ip == "::1" || ip == "::ffff:127.0.0.1"
+    }
+}
 
 let maxUpload = 64 << 20
 
@@ -77,6 +94,25 @@ func makeHubApplication(instance: Instance, host: String, port: Int, onRunning: 
             return json(Result(ok: true, error: nil))
         } catch {
             return json(Result(ok: false, error: error.localizedDescription), status: .badRequest)
+        }
+    }
+
+    // Machine commands are for this Mac's own scripts: the other Mac uses the link, and a
+    // browser on the network mustn't be able to move the machine.
+    router.post("/api/command") { request, context in
+        guard context.fromThisMac else { return json(Result(ok: false, error: "Commands are only taken from this Mac"), status: .forbidden) }
+        var request = request
+        let body = try await request.collectBody(upTo: 1 << 20)
+        let cmd: Command
+        do { cmd = try JSONDecoder().decode(Command.self, from: Data(buffer: body)) } catch {
+            return json(Result(ok: false, error: "Not a command: \(error.localizedDescription)"), status: .badRequest)
+        }
+        let by = request.headers[HTTPField.Name("x-by")!] ?? "API"
+        do {
+            try await instance.execute(cmd, by: by)
+            return json(Result(ok: true, error: nil))
+        } catch {
+            return json(Result(ok: false, error: error.localizedDescription), status: .conflict)
         }
     }
 

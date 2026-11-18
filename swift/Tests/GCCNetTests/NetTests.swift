@@ -270,6 +270,23 @@ actor Got {
         #expect(await until(20000) { await m.agent.session.job.status == .done })
     }
 
+    @Test func scriptsOnThisMacCanSendCommands() async throws {
+        let m = Macs()
+        try await m.startHub(machine: fastSim)
+        defer { Task { await m.stop() } }
+        let base = await m.base
+        let ok = try await http("POST", "\(base)/api/command", body: Data(#"{"type":"connect"}"#.utf8))
+        #expect(ok.status == 200)
+        #expect(await until { await m.hub.state().machine.status == .idle })
+        _ = try await http("POST", "\(base)/api/command", body: Data(#"{"type":"mdi","line":"G0 X-5"}"#.utf8))
+        #expect(await until { await abs(m.hub.state().machine.wpos[0] + 5) < 1e-6 })
+        // Refusals come back as errors, and junk is rejected.
+        let refused = try await http("POST", "\(base)/api/command", body: Data(#"{"type":"start","fileId":"nope"}"#.utf8))
+        #expect(refused.status == 409)
+        let junk = try await http("POST", "\(base)/api/command", body: Data(#"{"type":"fly"}"#.utf8))
+        #expect(junk.status == 400)
+    }
+
     @Test func eachMacKnowsTheOthersCodeAndCanAskItToUpdate() async throws {
         let m = Macs()
         let old = CodeVersion(version: "2.0.0", commit: "aaaaaaa1", time: 1_000)
