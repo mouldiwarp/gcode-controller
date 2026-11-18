@@ -1,8 +1,10 @@
-# GCode Controller
+# KerfLine
 
-**A GRBL sender for hobby CNC, as a native Mac app.** Design on one Mac, run the machine from another, and watch
-the same job live on both. It is built for a FoxAlien XE-Ultra (GRBL 1.1 over USB) and works with any
-GRBL 1.1, grblHAL or FluidNC machine that talks the standard serial protocol.
+**A GRBL sender for the Mac, built for the FoxAlien XE-Ultra 8080 and other GRBL 1.1 machines.** Design on one
+Mac, run the machine from another, and watch the same job live on both. It talks the standard GRBL serial protocol
+over USB, so grblHAL and FluidNC machines should work too (untested).
+
+KerfLine is an independent open source project. It isn't affiliated with or endorsed by FoxAlien.
 
 > [!WARNING]
 > **This is experimental software that moves a machine with a spinning cutter. You use it at your
@@ -12,14 +14,14 @@ GRBL 1.1, grblHAL or FluidNC machine that talks the standard serial protocol.
 
 ## How it fits together
 
-One native Mac app, **GCode Controller**, runs on both Macs. On first launch you choose what each Mac does:
+One native Mac app, **KerfLine**, runs on both Macs. On first launch you choose what each Mac does:
 
 ```
- Swarf / Fretboard ──HTTP POST──▶ ┌──────── GCode Controller (Hub, design Mac :8080) ────────┐
+ Swarf / Fretboard ──HTTP POST──▶ ┌──────────── KerfLine (Hub, design Mac :8080) ────────────┐
  ~/GCode Inbox ──────────────────▶│ library · HTTP API · Bonjour _gcodehub · the app window   │
                                   └───────────────▲───────────────────────────────────────────┘
                                                   │ link (WebSocket; the agent finds the hub with Bonjour and reconnects)
-                                  ┌───────────────┴──────── GCode Controller (Agent, garage Mac) ┐
+                                  ┌───────────────┴──────────────── KerfLine (Agent, garage Mac) ┐
                                   │ full copy of the library · GRBL streamer · the app window     │
                                   └───────────────┬───────────────────────────────────────────────┘
                                                   │ USB 115200 baud
@@ -44,13 +46,15 @@ One native Mac app, **GCode Controller**, runs on both Macs. On first launch you
 Both Macs need **macOS 26** and **Xcode 26** (or its Command Line Tools, for Swift 6.2). On each Mac:
 
 ```sh
-git clone https://github.com/mouldiwarp/gcode-controller.git
-cd gcode-controller
+git clone https://github.com/mouldiwarp/kerfline.git
+cd kerfline
 scripts/build-app.sh
 ```
 
 That compiles the app for that Mac (about a minute; a few on an older Mac) and installs **GCode Controller 2.0** in
-`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login.
+`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login. (Until the signed
+releases, the installed app, its bundle id and the library folder keep their GCode Controller names, so macOS's
+permissions don't reset twice; they change to KerfLine together with signing.)
 
 - **First launch** asks whether this Mac is the **Hub** or an **Agent**, its name, and whether the machine is on
   USB here, simulated, or not on this Mac. Change it later in **Settings** (⌘,).

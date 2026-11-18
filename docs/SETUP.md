@@ -9,12 +9,12 @@ Both Macs must be on the same Wi-Fi or LAN, with macOS 26 and Xcode 26 (or its C
 ## 1. Both Macs: build and install the app
 
 ```sh
-git clone https://github.com/mouldiwarp/gcode-controller.git
-cd gcode-controller
+git clone https://github.com/mouldiwarp/kerfline.git
+cd kerfline
 scripts/build-app.sh
 ```
 
-This installs **GCode Controller 2.0** in `~/Applications`. Open it from Spotlight (⌘Space, "GCode").
+This installs KerfLine as **GCode Controller 2.0** in `~/Applications` (it takes the KerfLine name with the signed releases). Open it from Spotlight (⌘Space, "GCode").
 Keep the checkout: the app updates itself from it.
 
 ## 2. Design Mac: the hub
