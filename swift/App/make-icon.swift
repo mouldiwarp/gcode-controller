@@ -1,6 +1,6 @@
 // Draws the app icon (obsidian tile, gold crosshair and spindle bit) and writes
-// an .iconset folder. scripts/build-mac-app.sh turns it into AppIcon.icns.
-// Usage: swift mac/make-icon.swift <out.iconset>
+// an .iconset folder. Make AppIcon.icns from it with:
+//   swift swift/App/make-icon.swift AppIcon.iconset && iconutil -c icns AppIcon.iconset -o swift/App/AppIcon.icns
 import AppKit
 
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset"

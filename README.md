@@ -1,6 +1,6 @@
 # GCode Controller
 
-**A networked GRBL sender for hobby CNC.** Design on one Mac, run the machine from another, and watch
+**A GRBL sender for hobby CNC, as a native Mac app.** Design on one Mac, run the machine from another, and watch
 the same job live on both. It is built for a FoxAlien XE-Ultra (GRBL 1.1 over USB) and works with any
 GRBL 1.1, grblHAL or FluidNC machine that talks the standard serial protocol.
 
@@ -10,143 +10,89 @@ GRBL 1.1, grblHAL or FluidNC machine that talks the standard serial protocol.
 > stock, and never leave a running machine unattended. Provided under the MIT License **without
 > warranty of any kind**.
 
-![A job running on the simulator, viewed from the machine-side browser](docs/screenshot-running.jpg)
-
 ## How it fits together
 
+One native Mac app, **GCode Controller**, runs on both Macs. On first launch you choose what each Mac does:
+
 ```
- Swarf / Fretboard ──HTTP POST──▶ ┌──────────── HUB (design Mac :8080) ────────────┐
- Browser upload ─────────────────▶│ file library · macros · state fan-out · UI      │◀── Browser (indoors)
-                                  └───────────────▲─────────────────────────────────┘
-                                                  │ WebSocket (agent dials out, reconnects, finds hub via Bonjour)
-                                  ┌───────────────┴──── AGENT (garage Mac :8081) ───┐
- Browser (garage, localhost) ────▶│ GRBL streamer · machine state · same UI          │
-                                  │ USB serial  |  built-in GRBL simulator           │
-                                  └───────────────┬─────────────────────────────────┘
+ Swarf / Fretboard ──HTTP POST──▶ ┌──────── GCode Controller (Hub, design Mac :8080) ────────┐
+ ~/GCode Inbox ──────────────────▶│ library · HTTP API · Bonjour _gcodehub · the app window   │
+                                  └───────────────▲───────────────────────────────────────────┘
+                                                  │ link (WebSocket; the agent finds the hub with Bonjour and reconnects)
+                                  ┌───────────────┴──────── GCode Controller (Agent, garage Mac) ┐
+                                  │ full copy of the library · GRBL streamer · the app window     │
+                                  └───────────────┬───────────────────────────────────────────────┘
                                                   │ USB 115200 baud
                                               CNC machine (GRBL 1.1)
 ```
 
-- **Hub** (design Mac): stores your G-code files and macros, serves the web UI, and relays live state to every browser.
-- **Agent** (Mac next to the machine): owns the USB port. **It copies the whole file before a job starts and streams
-  it to GRBL itself**, so a Wi-Fi dropout can't starve the machine mid-cut. It serves the same UI, so the browser next
-  to the machine keeps hold, stop, jog and zero even if the design Mac is asleep.
-- **Browsers**: any number. They all show the same machine position, job progress (3D and %), console and library.
-  A job can be started, paused or stopped from any of them.
+- **Hub** (design Mac): receives files from Swarf, Fretboard, the inbox folder and drag and drop, and keeps the
+  library in `~/Documents/GCode Controller`.
+- **Agent** (Mac next to the machine): drives the machine over USB. **It streams each job from its own copy of the
+  file**, so a Wi-Fi dropout can't starve the machine mid-cut, and it keeps working if the hub Mac is asleep or off.
+- **Either Mac can own the machine**: whichever has it plugged in over USB drives it. The other Mac shows the same
+  live position, progress and console, and can start, pause, stop, jog and zero it remotely.
+- **The library is fully synced.** Both Macs keep a complete copy, in an ordinary Finder folder. Changes on either
+  Mac, in the app or in Finder, reach the other one whenever they're connected. If the same file was changed on both
+  while they were apart, the app asks which to keep (or keeps both).
 
-## Getting started
+1.0 (tag `v1.0`) was a Node.js hub and agent with a browser UI. 2.0 replaced it with this app and kept all its features;
+1.0's code is still in the repository at that tag.
 
-Both Macs need **Node.js 22 LTS** (from [nodejs.org](https://nodejs.org); it supports macOS 11 Big Sur and later).
+## Installing
+
+Both Macs need **macOS 26** and **Xcode 26** (or its Command Line Tools, for Swift 6.2). On each Mac:
 
 ```sh
 git clone https://github.com/mouldiwarp/gcode-controller.git
 cd gcode-controller
-npm install
+scripts/build-app.sh
 ```
 
-### Design Mac: run the hub
+That compiles the app for that Mac (about a minute; a few on an older Mac) and installs **GCode Controller 2.0** in
+`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login.
 
-```sh
-npm run hub
-```
+- **First launch** asks whether this Mac is the **Hub** or an **Agent**, its name, and whether the machine is on
+  USB here, simulated, or not on this Mac. Change it later in **Settings** (⌘,).
+- **macOS asks** to let it find devices on the local network (click **Allow**, or the Macs can't link) and to
+  access the Documents folder (click **Allow**, or the library can't open). Plugging the machine into an
+  Apple-silicon laptop also asks once whether to allow the accessory.
+- **No USB driver is needed**: macOS includes one for the CH340 chip in the FoxAlien's controller, which shows up as
+  `/dev/cu.usbserial-*`. Skip the CH341 driver on FoxAlien's USB stick, which is for Windows.
+- **While a Mac has the machine** it's kept from idle sleep (closing the lid still sleeps it).
+- **Quitting** warns first if a job is running on this Mac's machine.
 
-Open <http://localhost:8080>. On the same network the hub is also at `http://<this-mac-name>.local:8080`.
-
-### Machine Mac: run the agent
-
-Without a machine (built-in GRBL simulator):
-
-```sh
-npm run agent -- --simulate
-```
-
-With the machine plugged in over USB (the port is found automatically). No driver is needed: macOS 11 and
-later include Apple's own driver for the CH340, and it shows up as `/dev/cu.usbserial-*`. Skip the CH341
-driver on FoxAlien's USB stick, which is for Windows. To see the ports, run `npm run agent -- --list-ports`.
-On an Apple-silicon laptop, macOS asks once whether to allow the accessory to connect: click **Allow**.
-
-```sh
-npm run agent
-```
-
-Open <http://localhost:8081> on the machine Mac. The agent finds the hub over Bonjour. To point it at a hub
-yourself, pass `--hub http://design-mac.local:8080`.
-
-See **[docs/SETUP.md](docs/SETUP.md)** for the full two-Mac walkthrough, including testing the sync with the
-simulator before the machine arrives.
-
-### The Mac app (launch from Spotlight)
-
-Build it once on each Mac:
-
-```sh
-scripts/build-mac-app.sh
-```
-
-This compiles **GCode Controller.app** for that Mac and installs it in `~/Applications`, where Spotlight
-finds it. Press ⌘Space and type "GCode". It needs the Command Line Tools (`xcode-select --install`),
-which git already uses, and Node 22 or later.
-
-- **First launch** asks what the Mac does: **Hub**, **Agent**, or **Agent with simulator**. Change it later
-  from the **Server** menu.
-- **Launching** builds the web UI if it's out of date, starts the server and opens the controller in your browser.
-  The app window shows status, the address, **Open in Browser**, **Restart** and the server log.
-- **Quitting** (⌘Q) stops the server. On the agent, it warns you first if a job is running. Even a force quit
-  stops the server, so the USB port is never left open.
-- **Closing the window** keeps the server running. Click the Dock icon to bring the window back.
-- **Local network prompt:** the first time it runs, macOS asks to let GCode Controller find devices on local
-  networks. Click **Allow**, or the agent can't reach the hub. To change it later, go to System Settings ▸ Privacy &
-  Security ▸ Local Network.
-- The app runs the code in this checkout. After a `git pull`, just relaunch. If you move the folder, use
-  **Server ▸ Choose Folder…**. Rerun the build script only when `mac/` changes.
-
-Nothing starts at login.
-
-### Launching by double-click
-
-To launch without the app, double-click:
-
-- **`Start Hub.command`** on the design Mac
-- **`Start Agent.command`** on the machine Mac, or **`Start Agent (Simulator).command`** to test without the machine
-
-Each opens a Terminal window, starts the server and opens the UI in your browser. Close the window to stop it.
+See **[docs/SETUP.md](docs/SETUP.md)** for the two-Mac walkthrough, including testing with the simulator.
 
 ## Updating
 
-Each server knows which git commit it started from. When the agent connects, the hub tells it which code it
-runs, and if the agent's is older:
+The app updates itself from GitHub. It checks every few hours (or **GCode Controller 2.0 ▸ Check for Updates…**),
+and **Update now** pulls the new code into the checkout it was built from, rebuilds, and restarts. If one Mac runs
+older code than the other, both show a banner, and either can tell the other to update. A Mac never updates while a
+job is running on it. If you've changed files in the checkout, the update is refused rather than touching them.
 
-- A banner on every browser says which Mac is behind, with **Update now** and **How to update**.
-- The agent **won't move the machine** (start, jog, home, probe, MDI, macros) until it's updated. Hold, Stop and
-  Reset always work, and a job or file group already under way finishes first. The hub enforces this too, so an
-  agent from before version checks is held as well.
-- **Update now** runs `git pull --ff-only`, `npm install` and a web build on that Mac, then restarts the server.
-  The Mac app and the double-click launchers start the new code by themselves; if you ran `npm run agent` by
-  hand, start it again. Pages reload themselves when the server they talk to has newer code.
-- If you've changed files in that checkout, the pull is refused rather than touching them: commit or stash them
-  and try again.
+By hand: `git pull && scripts/build-app.sh`, then quit and reopen the app.
 
-By hand, on the Mac that's behind: `git pull && npm install`, then restart the hub or agent. A hub that's behind
-the agent only gets a reminder, and can be updated the same way, even during a job (the agent streams it).
+Until the app is signed with a Developer ID, each rebuild is a new app to macOS's privacy settings, so after an update
+it may ask again for Documents and local network access. The start screen says so if it's waiting.
 
 ## The library
 
-Your G-code lives in ordinary folders under **`~/Documents/GCode Controller`** on the design Mac, one folder per
+Your G-code lives in ordinary folders under **`~/Documents/GCode Controller`** on both Macs, one folder per
 project. Swarf groups (one file per tool, side A / side B) arrive in a folder named after the group; single files land
-at the top level. Re-sending a file with the same name replaces it, and the old copy goes to the Trash.
+at the top level. Re-sending a file with the same name replaces it, and the old version is kept in its history.
 
-- **Library panel**: a folder tree beside the job controls. Drop files on a folder to upload into it.
-- **Manage** opens the library manager: make, rename and delete folders, rename files, and move files with the
-  **Move to** menu or by dragging them onto a folder. Deleted files and folders go to the macOS Trash.
-- **Finder** works too: add, move, rename or delete files and folders there, and the library follows within a few
-  seconds. Moved files keep their history.
-
-Use `--library <dir>` to keep the library somewhere else. The first time the hub starts with the folder library, it
-copies files from the old flat store in Application Support into the folders (the originals are kept as a backup).
+- **Library panel**: a folder tree beside the job controls. Drop files on a folder to add them there.
+- **Manage** opens the library manager: make, rename and delete folders, rename and move files, restore an
+  earlier version of a file (the last 5, for 30 days), and the Trash (deleted files are kept for 30 days).
+- **Finder** works too: add, move, rename, edit or delete files and folders there, on either Mac, and the
+  library follows within a few seconds. Moved files keep their history.
+- **Conflicts**: if the same file was changed on both Macs while they weren't connected, the file shows a badge
+  and **Resolve…** lets you keep either version, or both. Nothing is lost: the other version stays in the history.
 
 ## Sending G-code
 
-- **Drag and drop** files onto the Library panel (or onto a folder in it), or click **Upload**.
+- **Drag and drop** files onto the Library panel (or onto a folder in it), or click **Add…**.
 - **Drop files in `~/GCode Inbox`** on the design Mac. The hub imports them and moves them into `~/GCode Inbox/imported`.
 - **From an app or script**, POST the file to the hub:
 
@@ -158,12 +104,14 @@ copies files from the old flat store in Application Support into the folders (th
 
   Optional headers: `X-Group` (a name that groups related files, such as side A and side B) and `X-Group-Index`
   (their order). The hub advertises itself over Bonjour as `_gcodehub._tcp`.
+- **Scripts on the hub Mac** can also send any command to the app (connect, start, hold, resume, stop…) with
+  `POST http://localhost:8080/api/command` and a JSON body. Requests from other computers are refused.
 
 ## The UI
 
 | Area | What's there |
 |---|---|
-| Top bar | Hub, agent and machine status, who sent the last command, Home, Unlock, and big Hold / Stop buttons |
+| Top bar | Hub, agent and machine status, who sent the last command, Home, Unlock, and big Hold / Stop buttons. Banners below it for alarms, settings checks, updates and conflicts |
 | Left | Position readout (work and machine), zero per axis, zero XY / Z, go to zero, **Probe Z** with a touch plate, jog pad with step and feed presets (arrow keys and Page Up / Down also jog) |
 | Centre | 3D toolpath: remaining cuts in steel, finished cuts in gold, live tool position, work zero and machine envelope. Progress bar with %, line count, elapsed time and time left |
 | Right | Job controls (including running a file group in order, with a bit-change stop between files) and feed / spindle / rapid overrides, the file library, console with manual G-code entry, and macros |
@@ -199,13 +147,13 @@ Each time the controller connects, the app reads its settings and compares them 
 | `$32` | 0 | Laser mode off |
 | `$130`–`$132` | 800, 800, 100 | Travel |
 
-Anything different is listed at the top of the page with a button to set it back. The banner also flags the app's travel if it doesn't match the controller's. When everything matches it says so and can be dismissed. The list lives in `packages/shared/src/machineCheck.ts`.
+Anything different is listed at the top of the window with a button to set it back. The banner also flags the app's travel if it doesn't match the controller's. When everything matches it says so and can be dismissed. The list lives in `swift/Sources/GCCCore/MachineCheck.swift`.
 
 Some things the controller can't report. The banner and the Start dialog remind you to check them by hand. In particular, **the controller's Laser/Spindle switch must be on LASER**: the 1.5 kW spindle takes its PWM from the laser port.
 
 ## Staying within the machine's travel
 
-Soft limits are off on the FoxAlien (`$20=0`), so GRBL will drive into a limit switch if asked. Hitting one stops the machine dead in ALARM, often reported as ALARM 3, and the position is then lost. Once the machine is homed, the app checks every move against the travel set in Settings:
+If soft limits are off (`$20=0`), GRBL will drive into a limit switch if asked. Hitting one stops the machine dead in ALARM, often reported as ALARM 3, and the position is then lost. Once the machine is homed, the app checks every move against the travel set in Settings:
 
 - **Jogs** stop at the end of travel. A notification says when one was shortened, and a jog that can't move is refused.
 - **Typed commands and macros** are refused, with a notification, if any line would go past the travel. This covers absolute, relative, inch and `G53` moves. The whole batch is checked before any of it is sent.
@@ -227,7 +175,7 @@ Until the machine is homed, its position isn't known, so none of this applies. T
 
 ## Surfacing the spoilboard
 
-**Library → Surface…** makes a program to flatten the spoilboard:
+**Library ▸ Surfacing…** (or **Machine ▸ Surfacing…**) makes a program to flatten the spoilboard:
 
 1. Fit the surfacing cutter.
 2. Jog the bit's centre to the **left edge** of the board, on its **centre line** front to back, and press
@@ -239,19 +187,29 @@ Until the machine is homed, its position isn't known, so none of this applies. T
 It cuts in a zigzag along X, 50% stepover. The cutter never plunges: each pass ramps in at 2° along the first line,
 then goes back over the ramp at full depth. It runs at least r × (1 − 1/√2) past each edge so the round cutter
 reaches the corners: 4 mm by default for a 24 mm cutter. **Add to library** puts it in the library and the 3D view,
-and you start it from the Job panel as usual, with the out-of-travel check. The settings are remembered in each
-browser.
+and you start it from the Job panel as usual, with the out-of-travel check. The settings are remembered.
 
 ## Development
 
-```sh
-npm test            # unit + integration tests (simulator-backed)
-npm run typecheck
-npm run dev:web     # Vite dev server for the UI on :5173 (proxies to a hub on :8080)
-```
+The code is a Swift package in `swift/`:
 
-Packages: `packages/shared` (protocol, G-code parser, GRBL parser), `packages/agent` (serial streamer and
-simulator), `packages/hub` (library and sync server), `packages/web` (React + three.js UI).
+| Module | What |
+|---|---|
+| `GCCCore` | G-code and GRBL parsing, machine and job state, resume, progress, travel checks, surfacing, settings check |
+| `GCCMachine` | Serial port, GRBL simulator, the streaming session |
+| `GCCLibrary` | The library on disk: content store, SQLite, the Finder folder, history, Trash, sync changes |
+| `GCCNet` | The hub's HTTP API, Bonjour, the link between the Macs, sync, the inbox |
+| `GCCUI` | The SwiftUI app and its Metal 3D view |
+| `gcc` | Command-line tool |
+
+```sh
+scripts/ci.sh                         # the tests, in a clean checkout (as GitHub CI runs them)
+cd swift
+swift test
+swift run GCodeController             # run the app without installing it
+swift run gcc ports                   # serial ports (* = looks like GRBL)
+swift run gcc stream --simulate ../samples/test-square.nc
+```
 
 See [ROADMAP.md](ROADMAP.md) for what's planned.
 

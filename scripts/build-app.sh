@@ -6,7 +6,8 @@
 #   scripts/build-app.sh /Applications   install somewhere else
 #
 # Needs Xcode (or its Command Line Tools) for Swift 6.2. It never adds a login item: open the app
-# yourself. Until the cut-over it's "GCode Controller 2.0", beside 1.0's "GCode Controller".
+# yourself. It's still called "GCode Controller 2.0" (the name macOS's permissions are attached to);
+# it becomes "GCode Controller" when it's signed with a Developer ID.
 #
 # The new copy is only installed if the build succeeds, so a failed update leaves the old one.
 set -euo pipefail
@@ -29,7 +30,7 @@ APP="$STAGE/$NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/GCodeController" "$APP/Contents/MacOS/GCodeController"
-cp mac/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp swift/App/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

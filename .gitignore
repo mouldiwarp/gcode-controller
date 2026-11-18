@@ -1,11 +1,5 @@
-node_modules/
-dist/
-.data/
-*.log
 .DS_Store
-test-results/
-playwright-report/
-mac/build/
+*.log
 
 # Swift package builds
 swift/.build/

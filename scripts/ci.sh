@@ -3,10 +3,9 @@
 # doesn't have to wait for a GitHub runner. A clean checkout catches what a working tree hides:
 # files that were never committed, and dependencies that only resolve here.
 #
-#   scripts/ci.sh            node + swift, from a clean checkout of HEAD
-#   scripts/ci.sh swift      just the Swift package
-#   scripts/ci.sh node       just 1.0 (typecheck, tests, web build)
+#   scripts/ci.sh            from a clean checkout of HEAD
 #   CI_DIRTY=1 scripts/ci.sh  test the working tree as it is instead (faster, less faithful)
+# ("scripts/ci.sh swift" still works: there's only the Swift package now.)
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 what="${1:-all}"
@@ -22,12 +21,6 @@ fi
 cd "$dir"
 
 start=$SECONDS
-if [[ "$what" == all || "$what" == node ]]; then
-  echo "== node: npm ci"; npm ci --no-audit --no-fund --loglevel=error
-  echo "== node: typecheck"; npm run --silent typecheck
-  echo "== node: test"; npm test --silent
-  echo "== node: build:web"; npm run --silent build:web >/dev/null
-fi
 if [[ "$what" == all || "$what" == swift ]]; then
   echo "== swift: test"
   log="$(mktemp)"

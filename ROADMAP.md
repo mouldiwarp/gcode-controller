@@ -23,7 +23,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 
 ## 2.0: one native Swift app
 
-1.0 stays in service until 2.0 matches it. The 2.0 app is a single app that asks on first launch
+2.0 replaced 1.0 on 18 Nov 2026. It's a single app that asks on first launch
 whether this Mac is the hub or the agent. Either Mac can drive the FoxAlien over USB, and the
 library is kept fully in sync on both Macs, with conflicts resolved by asking. There's no browser.
 The code is in `swift/`. Try the machine layer from the command line:
@@ -38,7 +38,7 @@ swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected 
 `gcc stream` prints the console and progress, and Ctrl-C stops the job (feed hold, then reset).
 
 Install the app on each Mac with `scripts/build-app.sh` (about a minute; it installs
-"GCode Controller 2.0" in `~/Applications`, beside 1.0's app, and adds no login item). After that it
+"GCode Controller 2.0" in `~/Applications`, and adds no login item). After that it
 updates itself: it checks GitHub every few hours (or GCode Controller 2.0 ▸ Check for Updates…),
 and **Update now** pulls, rebuilds and restarts it. Either Mac can ask the other to update when it's
 behind. Neither updates while a job runs on it. While a Mac has the machine on USB it's kept awake.
@@ -52,8 +52,8 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
 | 5 | App shell: role picker (with a trial mode that leaves 1.0 alone), main window with every panel except 3D, keyboard jog, menus, toasts, library manager (folders, version history, Trash), conflict badges and dialog. Agent-alone-when-hub-is-down not yet tried on two Macs | ✅ |
 | 6 | Metal 3D view and every dialog | ✅ |
 | 7 | Build, install and self-update: `scripts/build-app.sh`, update from git (either Mac can update the other), keep-awake while it owns the machine | ✅ |
-| 8 | Cut-over on both Macs, real-machine checks, tag v2.0. Two-Mac rehearsal (trial mode, simulator) passed: 1.0 library import, sync both ways including Finder drops and deletes, a job on the garage driven from the hub with hold/resume, stop and resume from a line, and the hub quit mid-job (the garage finished on time and the hub relinked). Still to do on the FoxAlien: home, start-up settings check, probe, a surfacing pass, pause/resume, stop and resume from a line. Then switch both Macs out of trial, remove 1.0 and tag | 🔶 |
-| 9 | Later: signed, notarized DMG | 💡 |
+| 8 | Cut-over: both Macs run 2.0 (two-Mac rehearsal with the simulator, then on the FoxAlien: home, settings check, probe, surfacing, pause/resume, stop and resume from a line, self-update). 1.0's code removed (it's at tag `v1.0`). Tagged **v2.0** | ✅ |
+| 9 | Developer ID signing (permissions then survive updates), the app renamed "GCode Controller", then a notarized DMG | ⬜ waiting for the Apple Developer membership |
 
 ## Next up
 
@@ -86,23 +86,18 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
   Today it's estimated from acknowledged lines minus the planner queue.
 - ⬜ Depth-aware drawing. Later passes over the same XY at a lower Z draw over cut segments, which hides
   some of the gold. Draw finished segments on top, or add a "hide below current Z" slider.
-- ⬜ Parse large files (3D finishing passes run to 1M+ lines) in a Web Worker so the UI never stutters.
+- ⬜ Check that very large files (3D finishing passes run to 1M+ lines) parse off the main thread without the UI stuttering.
 - 💡 Stock box and simulated material removal, like Swarf's simulation.
 
 ### Comfort and safety
-- ⬜ Browser notification and sound when a job finishes, pauses on an error or alarms.
+- ⬜ macOS notification and sound when a job finishes, pauses on an error or alarms.
 - ⬜ Touch-friendly "garage mode": bigger buttons, full screen, wake lock so the display stays on.
 - ⬜ Job history: what ran, when, how long, who started it, and how it ended.
-- ⬜ Warn when hub and agent versions differ.
-- ⬜ Replace the browser's delete confirmation with an in-app dialog.
+- ✅ Warn when hub and agent versions differ (2.0's update banner).
 - 💡 Optional PIN for starting jobs, in case other people use the home network.
 - 💡 Webcam view of the machine in the UI.
 - 💡 Height-map probing and auto-levelling for engraving on uneven stock.
 
 ### Engineering
-- ⬜ Playwright end-to-end test with two real browsers. Today the same flows are covered by WebSocket
-  integration tests and were checked by hand in Chrome.
-- ⬜ Package the hub and agent as a single download (Node runtime included), so the garage Mac doesn't
-  need Node installed.
+- ⬜ A UI test that drives both apps (today the two-Mac flows are covered by in-process link tests and the rehearsal).
 - ⬜ Show machine and job status in the Mac app's window and Dock icon (progress badge, alarm colour).
-- 💡 Bonjour discovery in the Swift apps, if the hub ever moves off the design Mac.
