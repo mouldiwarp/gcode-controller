@@ -9,6 +9,7 @@
 // compiles with just the Command Line Tools. It targets macOS 12+, which covers both Macs.
 
 import AppKit
+import IOKit.pwr_mgt
 
 // MARK: - Roles
 
@@ -111,7 +112,15 @@ final class Server {
     var onLog: (String) -> Void = { _ in }
     var onState: (ServerState) -> Void = { _ in }
 
-    private(set) var state: ServerState = .stopped { didSet { onState(state) } }
+    private(set) var state: ServerState = .stopped {
+        didSet {
+            updateKeepAwake()
+            onState(state)
+        }
+    }
+    /// The role last started, so the agent (which drives the machine) can keep the Mac awake.
+    private var role: Role?
+    private var sleepAssertion: IOPMAssertionID = 0
     private var process: Process?
     private var stdinPipe: Pipe?
     private var healthTimer: Timer?
@@ -119,6 +128,7 @@ final class Server {
     private var stopping = false
 
     func start(role: Role, repo: URL, node: String, completion: @escaping (Bool) -> Void) {
+        self.role = role
         generation += 1
         let gen = generation
         stopping = false
@@ -224,6 +234,30 @@ final class Server {
     var isRunning: Bool { process?.isRunning ?? false }
 
     // MARK: private
+
+    /// While the agent runs, stop the Mac going to sleep when it's left idle: asleep, it drops
+    /// off the network (the hub loses the machine, and updates can't reach it) and a running
+    /// job's USB stream would stall. Like `caffeinate -i`: it changes no system setting and
+    /// ends when the agent stops or the app quits. Closing the lid still sleeps the Mac.
+    private func updateKeepAwake() {
+        let active: Bool
+        switch state {
+        case .stopped, .failed: active = false
+        default: active = role != nil && role != .hub
+        }
+        if active && sleepAssertion == 0 {
+            var id: IOPMAssertionID = 0
+            let reason = "GCode Controller's agent is connected to the CNC machine" as CFString
+            if IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleSystemSleep as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn), reason, &id) == kIOReturnSuccess {
+                sleepAssertion = id
+                log("☕ Keeping this Mac awake while the agent runs (closing the lid still sleeps it)\n")
+            }
+        } else if !active && sleepAssertion != 0 {
+            IOPMAssertionRelease(sleepAssertion)
+            sleepAssertion = 0
+            log("☾ The Mac can sleep again\n")
+        }
+    }
 
     private func setState(_ s: ServerState, _ gen: Int) {
         DispatchQueue.main.async { if gen == self.generation { self.state = s } }
