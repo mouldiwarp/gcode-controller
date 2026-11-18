@@ -28,6 +28,10 @@ export interface FakeGrblOptions {
   travel?: Vec3;
   rapidRate?: number;
   tickMs?: number;
+  /** Report a fourth (A) axis in probe results, as FoxAlien's 4-axis GRBL does. */
+  fourAxis?: boolean;
+  /** Print the banner when the port opens (false for 32-bit boards that don't reset on open). */
+  bannerOnOpen?: boolean;
   /** Delay before the welcome banner, ms (real time). */
   bootDelayMs?: number;
   /**
@@ -100,6 +104,8 @@ export class FakeGrbl implements Transport {
       rapidRate: opts.rapidRate ?? 5000,
       tickMs: opts.tickMs ?? 10,
       bootDelayMs: opts.bootDelayMs ?? 50,
+      fourAxis: opts.fourAxis ?? false,
+      bannerOnOpen: opts.bannerOnOpen ?? true,
       probeSurfaceZ: opts.probeSurfaceZ === undefined ? -60 : opts.probeSurfaceZ,
     };
     this.wco = [...this.opts.workOffset] as Vec3;
@@ -118,7 +124,7 @@ export class FakeGrbl implements Transport {
   async open(): Promise<void> {
     this.isOpen = true;
     this.timer = setInterval(() => this.tick(), this.opts.tickMs);
-    setTimeout(() => this.boot(), this.opts.bootDelayMs);
+    if (this.opts.bannerOnOpen) setTimeout(() => this.boot(), this.opts.bootDelayMs);
   }
 
   async close(): Promise<void> {
@@ -363,7 +369,7 @@ export class FakeGrbl implements Transport {
 
   private finishProbe(p: NonNullable<Block['probe']>): void {
     this.probing = false;
-    const prb = this.mpos.map((v) => v.toFixed(3)).join(',');
+    const prb = [...this.mpos, ...(this.opts.fourAxis ? [0] : [])].map((v) => v.toFixed(3)).join(',');
     if (!p.contact && p.alarmOnMiss) {
       this.planner = [];
       this.state = 'Alarm';

@@ -74,4 +74,26 @@ describe('Z probe', () => {
     expect(await probing).toBeInstanceOf(Error);
     expect(ctl.machine.probing).toBe(false);
   });
+
+  it("reads FoxAlien's 4-axis probe report and settings from a board that doesn't reset on open", async () => {
+    sim = new FakeGrbl({ bootDelayMs: 0, homingRequired: false, speed: 100, probeSurfaceZ: -20, fourAxis: true, bannerOnOpen: false });
+    ctl = new GrblController({ pollMs: 20, simulated: true });
+    ctl.config = { ...DEFAULT_CONFIG, probe: { ...DEFAULT_CONFIG.probe, plateThickness: 15 } };
+    await ctl.connect(sim);
+    await until(() => ctl.machine.connection === 'connected' && ctl.machine.status === 'Idle');
+    await until(() => !!ctl.machine.settings?.['130']);
+    expect(ctl.machine.firmware).toMatch(/^GRBL 1\.1h/);
+    await ctl.command({ type: 'probeZ' }, 'garage');
+    await until(() => Math.abs(ctl.machine.wpos[2] - 20) < 0.01);
+    expect(ctl.machine.wco[2]).toBeCloseTo(-35, 3);
+    expect(ctl.machine.lastProbe).toMatchObject({ ok: true, contactZ: -20 });
+  });
+
+  it('keeps settings typed as $$ in the console', async () => {
+    await setup(-20);
+    await until(() => !!ctl.machine.settings?.['130']);
+    await ctl.command({ type: 'mdi', line: '$130=750' });
+    await ctl.command({ type: 'mdi', line: '$$' });
+    await until(() => ctl.machine.settings?.['130'] === '750.000' || ctl.machine.settings?.['130'] === '750');
+  });
 });

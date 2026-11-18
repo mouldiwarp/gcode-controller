@@ -172,13 +172,16 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       case 'setting': {
         const m = /^\$(\d+)=(.*)$/.exec(line);
         if (m && this.settingsDraft) this.settingsDraft[m[1]] = m[2];
+        // $$ typed in the console: keep the machine's settings up to date as well.
+        else if (m) this.updateMachine({ settings: { ...(this.machine.settings ?? {}), [m[1]]: m[2] } });
         this.echoIfUser(line);
         return;
       }
       case 'feedback':
         if (line.startsWith('[GC:')) this.updateMachine({ modal: line.slice(4, -1) });
         if (line.startsWith('[PRB:')) {
-          const m = /^\[PRB:([-\d.]+),([-\d.]+),([-\d.]+):(\d)\]$/.exec(line);
+          // X,Y,Z then any extra axes (FoxAlien's 4-axis GRBL adds A), then :1 for a contact.
+          const m = /^\[PRB:([-\d.]+),([-\d.]+),([-\d.]+)(?:,[-\d.]+)*:(\d)\]$/.exec(line);
           if (m) this.lastPrb = { pos: [Number(m[1]), Number(m[2]), Number(m[3])], ok: m[4] === '1' };
           this.log('in', line);
           return;
@@ -213,7 +216,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       this.failJob('The controller reset during the job');
     }
     this.updateMachine({ connection: 'connected', firmware: /grblhal/i.test(line) ? 'grblHAL' : this.machine.firmware ?? 'GRBL' });
-    if (wasConnecting) {
+    if (wasConnecting || !this.machine.settings) {
       this.internal('$I');
       this.queryState();
     }
@@ -246,7 +249,15 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     if (s.buffer) patch.buffer = s.buffer;
     patch.pins = s.pins;
     if (s.state !== 'Alarm' && this.machine.alarm) patch.alarm = undefined;
-    if (this.machine.connection === 'connecting') patch.connection = 'connected';
+    if (this.machine.connection === 'connecting') {
+      // Boards that don't reset when the port opens (no banner) come up through a status
+      // report instead: ask for the build info and settings here too.
+      patch.connection = 'connected';
+      queueMicrotask(() => {
+        this.internal('$I');
+        this.queryState();
+      });
+    }
     this.updateMachine(patch);
 
     // GRBL ignores feed hold while Idle, so a hold pressed just before motion
