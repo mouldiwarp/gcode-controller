@@ -1552,3 +1552,25 @@ label.field {
     linear-gradient(#6a9fd9, #6a9fd9) 0 0 / 2px 100% no-repeat,
     linear-gradient(#d96b6b, #d96b6b) 0 100% / 100% 2px no-repeat;
 }
+
+/* ---- Spoilboard surfacing ---- */
+
+.modal.wide {
+  width: min(680px, 100%);
+}
+
+.surf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.surf-summary {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--obsidian);
+  font-size: 13px;
+}

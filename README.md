@@ -184,6 +184,23 @@ start dialog offers to run the rest of the group in order. After each file the s
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
 the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
+## Surfacing the spoilboard
+
+**Library → Surface…** makes a program to flatten the spoilboard:
+
+1. Fit the surfacing cutter.
+2. Jog the bit's centre to the **left edge** of the board, on its **centre line** front to back, and press
+   **Zero XY here**.
+3. Set Z zero on the surface (**Zero Z here** with the bit touching it, or **Probe Z…**).
+4. Enter the length (X, to the right of zero) and width (Y, centred on zero) to flatten, and the depth to remove
+   (0.5 mm by default).
+
+It cuts in a zigzag along X, 50% stepover. The cutter never plunges: each pass ramps in at 2° along the first line,
+then goes back over the ramp at full depth. It runs at least r × (1 − 1/√2) past each edge so the round cutter
+reaches the corners: 4 mm by default for a 24 mm cutter. **Add to library** puts it in the library and the 3D view,
+and you start it from the Job panel as usual, with the out-of-travel check. The settings are remembered in each
+browser.
+
 ## Development
 
 ```sh

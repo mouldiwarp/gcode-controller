@@ -15,6 +15,7 @@ import { ProbeDialog } from './components/ProbeDialog.tsx';
 import { LibraryManager } from './components/LibraryManager.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { ColumnResizer } from './components/ColumnResizer.tsx';
+import { SurfacingDialog } from './components/SurfacingDialog.tsx';
 
 export function App() {
   const state = useStore((s) => s.state);
@@ -60,6 +61,7 @@ export function App() {
       <StartDialog />
       <SettingsDialog />
       <LibraryManager />
+      <SurfacingDialog />
       <ProbeDialog />
       <Toasts />
     </div>

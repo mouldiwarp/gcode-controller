@@ -19,6 +19,7 @@ export function LibraryPanel() {
   const s = useStore((x) => x.state)!;
   const toast = useStore((x) => x.toast);
   const setManagerOpen = useStore((x) => x.setManagerOpen);
+  const setSurfacingOpen = useStore((x) => x.setSurfacingOpen);
   const [over, setOver] = useState(false);
   const [open, setOpen] = useState(loadOpenFolders);
   const input = useRef<HTMLInputElement>(null);
@@ -54,6 +55,9 @@ export function LibraryPanel() {
       <h3 className="panel-title">
         <span>Library</span>
         <span className="row" style={{ gap: 6 }}>
+          <button className="btn small ghost" onClick={() => setSurfacingOpen(true)} title="Make a program to flatten the spoilboard">
+            Surface…
+          </button>
           <button className="btn small ghost" onClick={() => setManagerOpen(true)} title="Organise projects into folders">
             Manage
           </button>

@@ -17,6 +17,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 7b | Z probe with a touch plate; run a file group in order with bit-change stops | ✅ (simulator-tested; check on the machine) |
 | 7c | Library manager: project folders in `~/Documents/GCode Controller`, kept in step with Finder | ✅ |
 | 7d | Version checks: an out-of-date agent is held until it's updated, with Update now | ✅ |
+| 7e | Spoilboard surfacing: zero at the left edge on the centre line, ramp-in zigzag skim | ✅ (simulator-tested) |
 | 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
 
 ## Next up
@@ -32,6 +33,8 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 - ⬜ First air cut of `samples/test-square.nc` with Z zeroed 20 mm above the stock.
 
 ### Workflow features (from UGS and WorkBee)
+- ⬜ **Progress by time, not lines.** GRBL acknowledges lines when it queues them, so % and the time left run
+  ahead on files with few long moves (surfacing). Weight progress by each line's estimated time instead.
 - ✅ **Z probe with a touch plate** (`G38.2`): a fast touch then a slow one, with plate thickness in Settings.
 - ✅ **Run a job group in order**, stopping for a bit change and a Z re-probe between files.
 - ⬜ Probe X/Y corners with the touch plate (corner-finding), as WorkBee's XYZ probe block does.
