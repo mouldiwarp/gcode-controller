@@ -173,7 +173,18 @@ export class FakeGrbl implements Transport {
 
   // ---- Internals ----
 
+  private dropOks = 0;
+
+  /** Lose the next reply, as a glitch on the USB link might (for tests). */
+  dropNextOk(): void {
+    this.dropOks++;
+  }
+
   private send(line: string): void {
+    if (line === 'ok' && this.dropOks > 0) {
+      this.dropOks--;
+      return;
+    }
     const s = line + '\r\n';
     for (const cb of this.dataCbs) cb(s);
   }

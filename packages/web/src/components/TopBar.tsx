@@ -9,7 +9,8 @@ export function TopBar() {
   const ready = machineReady(s);
   const m = s.machine;
   const active = jobActive(s);
-  const moving = ['Run', 'Jog', 'Home'].includes(m.status);
+  // Probing counts as moving even between its moves, so Hold and Stop stay available.
+  const moving = ['Run', 'Jog', 'Home'].includes(m.status) || !!m.probing;
   const held = m.status === 'Hold';
 
   const machineLabel =

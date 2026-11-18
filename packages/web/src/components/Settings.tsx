@@ -18,6 +18,8 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState(clientName);
   const c = s.config;
   const [travel, setTravel] = useState(c.envelope.max.map((mx, i) => mx - c.envelope.min[i]));
+  // Where homing puts machine 0,0,0: GRBL's default back-right, or front-left (FoxAlien: X/Y count up from it).
+  const [corner, setCorner] = useState<'back-right' | 'front-left'>(c.envelope.min[0] >= 0 && c.envelope.min[1] >= 0 ? 'front-left' : 'back-right');
   const [safeZ, setSafeZ] = useState(c.safeZ);
   const [jogXY, setJogXY] = useState(c.jogFeedXY);
   const [jogZ, setJogZ] = useState(c.jogFeedZ);
@@ -41,7 +43,10 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       .filter((v) => v > 0)
       .sort((a, b) => a - b);
     const config: Partial<MachineConfig> = {
-      envelope: { min: [-travel[0], -travel[1], -travel[2]], max: [0, 0, 0] },
+      envelope:
+        corner === 'front-left'
+          ? { min: [0, 0, -travel[2]], max: [travel[0], travel[1], 0] }
+          : { min: [-travel[0], -travel[1], -travel[2]], max: [0, 0, 0] },
       safeZ,
       jogFeedXY: jogXY,
       jogFeedZ: jogZ,
@@ -59,6 +64,10 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
     const st = m.settings;
     if (!st) return;
     setTravel([Number(st['130'] ?? travel[0]), Number(st['131'] ?? travel[1]), Number(st['132'] ?? travel[2])]);
+    // $23 bits 0 and 1: X and Y home towards their minimum (front-left).
+    const dir = Number(st['23'] ?? 0);
+    if ((dir & 3) === 3) setCorner('front-left');
+    else if ((dir & 3) === 0) setCorner('back-right');
   };
 
   const num = (v: number, set: (n: number) => void) => ({
@@ -121,8 +130,16 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
               </label>
             ))}
           </div>
+          <label className="field" style={{ marginTop: 10 }}>
+            Homing sets machine 0,0,0 at the
+            <select className="input" value={corner} onChange={(e) => setCorner(e.target.value as 'back-right' | 'front-left')}>
+              <option value="front-left">front-left-top corner: X and Y count up from it (FoxAlien, $23=3)</option>
+              <option value="back-right">back-right-top corner: X and Y count down from it (GRBL default, $23=0)</option>
+            </select>
+          </label>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Drawn as the machine envelope, assuming GRBL's default of homing to the back-right-top corner (machine 0,0,0).
+            Check after homing: MACH under the position should read 0,0,0, and jogging right and back should make X and Y
+            {corner === 'front-left' ? ' go up' : ' go down'}. This places the machine travel in the 3D view and the out-of-travel checks.
           </div>
         </div>
 

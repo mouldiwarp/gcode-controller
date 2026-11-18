@@ -33,6 +33,8 @@ interface QueuedLine {
   /** Echo responses to the console (user commands). */
   echo: boolean;
   resolve?: (r: { ok: boolean; error?: string }) => void;
+  /** When it was written to the controller. */
+  sentAt?: number;
 }
 
 export interface ControllerEvents {
@@ -216,7 +218,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       this.failJob('The controller reset during the job');
     }
     this.updateMachine({ connection: 'connected', firmware: /grblhal/i.test(line) ? 'grblHAL' : this.machine.firmware ?? 'GRBL' });
-    if (wasConnecting || !this.machine.settings) {
+    if (wasConnecting || !this.machine.settings || !Object.keys(this.machine.settings).length) {
       this.internal('$I');
       this.queryState();
     }
@@ -224,10 +226,11 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   }
 
   private queryState(): void {
-    this.settingsDraft = {};
+    const draft = (this.settingsDraft = {});
     this.internal('$$', () => {
-      if (this.settingsDraft) this.updateMachine({ settings: this.settingsDraft });
-      this.settingsDraft = null;
+      // Interrupted (a reset) before any settings arrived: leave them unread so they're asked for again.
+      if (Object.keys(draft).length) this.updateMachine({ settings: { ...(this.machine.settings ?? {}), ...draft } });
+      if (this.settingsDraft === draft) this.settingsDraft = null;
     });
     this.internal('$G');
   }
@@ -246,7 +249,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     if (s.feed !== undefined) patch.feed = s.feed;
     if (s.spindle !== undefined) patch.spindle = s.spindle;
     if (s.overrides) patch.overrides = s.overrides;
-    if (s.buffer) patch.buffer = s.buffer;
+    if (s.buffer) {
+      patch.buffer = s.buffer;
+      this.checkForLostReplies(s.state, s.buffer);
+    }
     patch.pins = s.pins;
     if (s.state !== 'Alarm' && this.machine.alarm) patch.alarm = undefined;
     if (this.machine.connection === 'connecting') {
@@ -329,6 +335,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       if (this.inflight.length && this.inflightBytes + len > this.rxSize) return;
       if (fromJob) this.jobCursor++;
       else this.queue.shift();
+      next.sentAt = Date.now();
       this.inflight.push(next);
       this.inflightBytes += len;
       t.write(next.text + '\n');
@@ -361,6 +368,31 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     this.queue = [];
     this.inflightBytes = 0;
     for (const p of pending) p.resolve?.({ ok: false, error: reason });
+  }
+
+  private maxRxFree = 0;
+  private maxPlannerFree = 0;
+
+  /**
+   * GRBL answers every line with ok or error, so the lines waiting for a reply should be the
+   * ones still in its buffer. If it reports an empty input buffer and planner while idle, yet
+   * lines have waited over two seconds, a reply went missing and everything after it would be
+   * answered one late (the last command never). Treat those lines as done instead of hanging.
+   */
+  private checkForLostReplies(state: string, buf: { planner: number; rx: number }): void {
+    this.maxRxFree = Math.max(this.maxRxFree, buf.rx);
+    this.maxPlannerFree = Math.max(this.maxPlannerFree, buf.planner);
+    const oldest = this.inflight[0];
+    if (!oldest || state !== 'Idle' || buf.rx < this.maxRxFree || buf.planner < this.maxPlannerFree) return;
+    // A dwell reports Idle with empty buffers before it answers; job lines are left to the streamer.
+    if (this.inflight.some((l) => l.kind === 'job' || /G0?4(?![\d.])/i.test(l.text))) return;
+    if (Date.now() - (oldest.sentAt ?? Date.now()) < 2000) return;
+    const lost = this.inflight;
+    this.inflight = [];
+    this.inflightBytes = 0;
+    this.log('info', `No reply from the controller to ${lost.map((l) => `"${l.text}"`).join(', ')}, though it has finished with ${lost.length > 1 ? 'them' : 'it'}. Carrying on.`);
+    for (const l of lost) l.resolve?.({ ok: true });
+    this.pump();
   }
 
   private realtime(byte: string): void {
@@ -481,6 +513,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       case 'home':
         need();
         if (this.isJobActive) throw new Error("Can't home while a job is running");
+        // GRBL may not answer status queries while homing, so the UI can look idle: ignore repeats.
+        if ([...this.inflight, ...this.queue].some((l) => l.text === '$H') || this.machine.status === 'Home') {
+          throw new Error('Already homing');
+        }
         return run('$H');
       case 'unlock':
         need();

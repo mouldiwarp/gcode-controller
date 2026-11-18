@@ -90,7 +90,11 @@ function ProbeBody({ onClose }: { onClose: () => void }) {
           <dd className="mono">{m.wpos[2].toFixed(3)}</dd>
         </dl>
 
-        {m.probing && <div className="banner info">Probing… Hold or Stop at the top of the page abort it.</div>}
+        {m.probing && (
+          <div className="banner info">
+            Probing… Press <b>Stop probing</b> below (or Stop at the top of the page) to halt it.
+          </div>
+        )}
         {result && (
           <div className={`banner ${result.ok ? 'ok' : ''}`}>
             <strong>{result.ok ? 'Done' : 'Failed'}</strong> {result.message}
@@ -98,6 +102,11 @@ function ProbeBody({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="actions">
+          {m.probing && (
+            <button className="btn big danger" onClick={() => run({ type: 'stop' })} autoFocus>
+              Stop probing
+            </button>
+          )}
           <button className="btn" disabled={m.probing} onClick={onClose}>
             {result?.ok ? 'Close' : 'Cancel'}
           </button>

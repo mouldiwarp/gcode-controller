@@ -96,4 +96,15 @@ describe('Z probe', () => {
     await ctl.command({ type: 'mdi', line: '$$' });
     await until(() => ctl.machine.settings?.['130'] === '750.000' || ctl.machine.settings?.['130'] === '750');
   });
+
+  it('carries on when a reply goes missing instead of hanging', async () => {
+    await setup(-20);
+    sim.dropNextOk();
+    const r = await ctl.command({ type: 'mdi', line: 'G21' });
+    expect(r).toBeUndefined();
+    expect(ctl.console.some((l) => /No reply from the controller to "G21"/.test(l.text))).toBe(true);
+    await ctl.command({ type: 'probeZ' }, 'garage');
+    await until(() => Math.abs(ctl.machine.wpos[2] - 20) < 0.01);
+    expect(ctl.machine.lastProbe).toMatchObject({ ok: true });
+  });
 });
