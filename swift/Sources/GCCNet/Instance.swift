@@ -29,8 +29,11 @@ public struct InstanceOptions: Sendable {
     /// Hub: the address and port to listen on (0 picks a free port).
     public var host: String
     public var port: Int
-    /// Hub: advertise `_gcodehub._tcp`.
+    /// Hub: advertise on Bonjour.
     public var advertise: Bool
+    /// The Bonjour service the hub advertises and the agent looks for (a trial run alongside 1.0
+    /// uses its own, so Swarf keeps finding 1.0).
+    public var serviceType: String
     /// Agent: the hub, e.g. ws://hub.local:8080/link; nil finds it with Bonjour.
     public var hubURL: URL?
     public var machine: MachineOption
@@ -45,7 +48,7 @@ public struct InstanceOptions: Sendable {
     public var relayTimeout: Double
 
     public init(
-        name: String, role: Role, host: String = "0.0.0.0", port: Int = defaultHubPort, advertise: Bool = true, hubURL: URL? = nil,
+        name: String, role: Role, host: String = "0.0.0.0", port: Int = defaultHubPort, advertise: Bool = true, serviceType: String = hubServiceType, hubURL: URL? = nil,
         machine: MachineOption = .serial(path: nil), inbox: URL? = nil, pollMs: Int = 150, redialSeconds: Double = 2,
         reconnectSeconds: Double = 3, relayTimeout: Double = 30
     ) {
@@ -54,6 +57,7 @@ public struct InstanceOptions: Sendable {
         self.host = host
         self.port = port
         self.advertise = advertise
+        self.serviceType = serviceType
         self.hubURL = hubURL
         self.machine = machine
         self.inbox = inbox
@@ -72,8 +76,8 @@ public enum InstanceEvent: Sendable {
 
 public actor Instance {
     public let options: InstanceOptions
-    public let library: Library
-    public let session: MachineSession
+    public nonisolated let library: Library
+    public nonisolated let session: MachineSession
     /// Hub: the port it's listening on, once started.
     public private(set) var port: Int?
 
@@ -124,7 +128,7 @@ public actor Instance {
         switch options.role {
         case .hub:
             try await startServer()
-            if options.advertise, let port { advert = BonjourAdvert(name: options.name, port: port) }
+            if options.advertise, let port { advert = BonjourAdvert(name: options.name, port: port, type: options.serviceType) }
             if let dir = options.inbox {
                 let inbox = Inbox(dir, onFile: { [weak self] name, data in
                     guard let self else { return }
@@ -138,7 +142,7 @@ public actor Instance {
             }
         case .agent:
             if options.hubURL == nil {
-                let browser = BonjourBrowser(onFound: { [weak self] hub in
+                let browser = BonjourBrowser(type: options.serviceType, onFound: { [weak self] hub in
                     Task { await self?.found(hub) }
                 })
                 browser.start()

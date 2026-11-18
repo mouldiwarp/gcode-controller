@@ -43,7 +43,7 @@ swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected 
 | 2 | Machine: serial port, simulator, streaming session (1.0's controller tests all ported), `gcc` command-line streamer. Real-machine air cut with `gcc stream` still to do | ✅ |
 | 3 | Library on disk: content blobs, SQLite with a per-field change log, Finder folder kept in step both ways (moves keep their id), 5 versions / 30 days of history, a 30-day Trash, 1.0 import | ✅ |
 | 4 | Network and sync: hub API (Swarf/Fretboard unchanged), Bonjour, inbox, link between the Macs with either-Mac machine ownership and command relay, library sync and conflicts (log compaction deferred) | ✅ |
-| 5 | App shell: role picker, main window, panels, library UI with conflicts | ⬜ |
+| 5 | App shell: role picker (with a trial mode that leaves 1.0 alone), main window with every panel except 3D, keyboard jog, menus, toasts, library manager (folders, version history, Trash), conflict badges and dialog. Agent-alone-when-hub-is-down not yet tried on two Macs | ✅ |
 | 6 | Metal 3D view and every dialog | ⬜ |
 | 7 | Build, install and self-update | ⬜ |
 | 8 | Cut-over on both Macs, real-machine checks, tag v2.0 | ⬜ |

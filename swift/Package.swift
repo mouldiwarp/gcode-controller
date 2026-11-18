@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "GCCLibrary", targets: ["GCCLibrary"]),
         .library(name: "GCCNet", targets: ["GCCNet"]),
         .executable(name: "gcc", targets: ["gcc"]),
+        .executable(name: "GCodeController", targets: ["GCodeController"]),
     ],
     dependencies: [
         // HTTP and WebSocket server (SwiftNIO). The only third-party code.
@@ -32,11 +33,16 @@ let package = Package(
             .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
             .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
         ]),
+        // The window: SwiftUI views and the model behind them (a library so tests can reach it).
+        .target(name: "GCCUI", dependencies: ["GCCCore", "GCCMachine", "GCCLibrary", "GCCNet"]),
+        // The app: run as Hub or Agent, chosen on first launch.
+        .executableTarget(name: "GCodeController", dependencies: ["GCCUI"]),
         // Headless sender: `gcc ports`, `gcc stream [--simulate | --port P] file.nc`.
         .executableTarget(name: "gcc", dependencies: ["GCCMachine"]),
         .testTarget(name: "GCCCoreTests", dependencies: ["GCCCore"]),
         .testTarget(name: "GCCMachineTests", dependencies: ["GCCMachine"]),
         .testTarget(name: "GCCLibraryTests", dependencies: ["GCCLibrary"]),
         .testTarget(name: "GCCNetTests", dependencies: ["GCCNet", "GCCCore", "GCCMachine", "GCCLibrary"]),
+        .testTarget(name: "GCCUITests", dependencies: ["GCCUI", "GCCNet", "GCCCore", "GCCMachine", "GCCLibrary"]),
     ]
 )

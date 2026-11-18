@@ -80,6 +80,15 @@ public struct LinkState: Codable, Sendable, Equatable {
     public var agentName: String?
     /// The Mac the machine is plugged into, when it's connected.
     public var machineOn: String?
+
+    public init(hubConnected: Bool, agentConnected: Bool, via: Role, hubName: String? = nil, agentName: String? = nil, machineOn: String? = nil) {
+        self.hubConnected = hubConnected
+        self.agentConnected = agentConnected
+        self.via = via
+        self.hubName = hubName
+        self.agentName = agentName
+        self.machineOn = machineOn
+    }
 }
 
 public struct AppState: Codable, Sendable, Equatable {
@@ -92,4 +101,19 @@ public struct AppState: Codable, Sendable, Equatable {
     public var macros: [Macro]
     public var config: MachineConfig
     public var console: [ConsoleLine]
+
+    public init(
+        link: LinkState, machine: MachineState, job: JobState, library: [LibraryItem], folders: [String], libraryRoot: String?, macros: [Macro],
+        config: MachineConfig, console: [ConsoleLine]
+    ) {
+        self.link = link
+        self.machine = machine
+        self.job = job
+        self.library = library
+        self.folders = folders
+        self.libraryRoot = libraryRoot
+        self.macros = macros
+        self.config = config
+        self.console = console
+    }
 }
