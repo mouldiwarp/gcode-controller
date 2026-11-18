@@ -26,7 +26,7 @@ struct JobPanel: View {
                 Eyebrow(next.map { "Next · file \($0.index + 1) of \($0.total)" } ?? (active ? "Running" : "Selected"))
                 Text(next?.name ?? (active ? job.fileName ?? "—" : selected?.name ?? "—"))
                     .font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.offwhite).lineLimit(2)
-                if let f = active ? s.library.first(where: { $0.id == job.fileId }) : selected {
+                if let f = next.map({ n in s.library.first(where: { $0.id == n.id }) }) ?? (active ? s.library.first(where: { $0.id == job.fileId }) : selected) {
                     HStack(spacing: 8) {
                         if f.estSeconds > 0 { Text("~\(formatDuration(f.estSeconds))") }
                         Text(dims(f))

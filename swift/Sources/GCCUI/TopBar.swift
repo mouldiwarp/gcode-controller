@@ -11,7 +11,7 @@ struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("GCODE CONTROLLER").font(.custom("Helvetica", size: 13).weight(.bold)).tracking(3).foregroundStyle(Color.gold)
+            Text("KERFLINE").font(.custom("Helvetica", size: 13).weight(.bold)).tracking(3).foregroundStyle(Color.gold)
             if model.setup?.trial == true { Badge(text: "2.0 TRIAL", color: .warn) }
             Pill {
                 Dot(ok: s.link.hubConnected)
@@ -84,7 +84,7 @@ struct Banners: View {
                 Banner(kind: .info, text: "Hub offline: working on this Mac's copy of the library. Changes sync when it's back.")
             }
             if s.link.via == .hub, !s.link.agentConnected, s.link.machineOn == nil, model.setup?.machine == MachineKind.none {
-                Banner(kind: .info, text: "The garage Mac isn't connected. Open GCode Controller there to use the machine.")
+                Banner(kind: .info, text: "The garage Mac isn't connected. Open KerfLine there to use the machine.")
             }
             if let a = s.machine.alarm {
                 Banner(kind: .danger, text: "ALARM \(a.code): \(a.message)") {

@@ -48,7 +48,8 @@ public struct AppSetup: Codable, Equatable, Sendable {
 
     static let key = "gcc.setup"
 
-    /// Development: GCC_HOME=<folder> puts every path (and the saved setup) under that folder.
+    /// Development: GCC_HOME=<folder> puts every path (and the saved setup) under that folder, on its
+    /// own port and Bonjour service, so it can run beside the installed app without either noticing.
     static let devHome: URL? = ProcessInfo.processInfo.environment["GCC_HOME"].map { URL(filePath: $0) }
     public static var store: UserDefaults { devHome == nil ? .standard : UserDefaults(suiteName: "GCodeController.dev")! }
 
@@ -71,8 +72,8 @@ public struct AppSetup: Codable, Equatable, Sendable {
     public var libraryRoot: URL { AppSetup.home.appending(path: trial ? "Documents/GCode Controller 2.0 Trial" : "Documents/GCode Controller") }
     /// Hub: files dropped here are imported.
     public var inbox: URL { AppSetup.home.appending(path: trial ? "GCode Inbox 2.0 Trial" : "GCode Inbox") }
-    public var port: Int { trial ? defaultHubPort + 1 : defaultHubPort }
-    public var serviceType: String { trial ? "_gcodehub-try._tcp" : hubServiceType }
+    public var port: Int { AppSetup.devHome != nil ? defaultHubPort + 10 : trial ? defaultHubPort + 1 : defaultHubPort }
+    public var serviceType: String { AppSetup.devHome != nil ? "_gcodehub-dev._tcp" : trial ? "_gcodehub-try._tcp" : hubServiceType }
 
     /// 1.0's hub library, imported (read only) on the hub's first start.
     public var v1: V1Paths? {

@@ -14,12 +14,15 @@ public struct GCodeControllerApp: App {
     public init() {}
 
     public var body: some Scene {
-        Window("GCode Controller", id: "main") {
+        Window("KerfLine", id: "main") {
             RootView()
                 .environment(model)
                 .frame(minWidth: 1100, minHeight: 700)
                 .preferredColorScheme(.dark)
-                .onAppear { delegate.model = model }
+                .onAppear {
+                    delegate.model = model
+                    DevShow.listen(model)
+                }
         }
         .defaultSize(width: 1440, height: 900)
         .commands { AppCommands(model: model) }
@@ -132,19 +135,23 @@ struct MainWindow: View {
 
                 VStack(spacing: 12) {
                     JobPanel(s: s)
-                    LibraryPanel(s: s).frame(maxHeight: .infinity)
-                    ToolsPanel(s: s).frame(height: 260)
+                    // The library and tools give way when the job panel grows (bit-change steps), so
+                    // the column never gets taller than the window and pushes the top bar out of view.
+                    LibraryPanel(s: s).frame(minHeight: 110, maxHeight: .infinity).layoutPriority(-1)
+                    ToolsPanel(s: s).frame(minHeight: 150, idealHeight: 260, maxHeight: 260).layoutPriority(-1)
                 }
                 .frame(width: rightWidth)
+                .frame(maxHeight: .infinity, alignment: .top)
                 .overlay(alignment: .leading) { ColumnResizer(width: $rightWidth) }
             }
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Toasts sit below the banners, so they never cover a banner's buttons.
+            .overlay(alignment: .topTrailing) { ToastsView().padding(.top, 8).padding(.trailing, 16) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.obsidian)
         .foregroundStyle(Color.offwhite)
-        .overlay(alignment: .topTrailing) { ToastsView().padding(.top, 56).padding(.trailing, 16) }
         .sheet(isPresented: $model.managerOpen) { LibraryManager(s: s).environment(model) }
         .sheet(isPresented: $model.conflictsOpen) { ConflictsView().environment(model) }
         .sheet(item: $model.confirmStart) { req in StartDialog(req: req).environment(model) }
@@ -220,7 +227,7 @@ struct LaunchFailed: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("GCode Controller couldn't start").font(.system(size: 17, weight: .semibold))
+            Text("KerfLine couldn’t start").font(.system(size: 17, weight: .semibold))
             Text(error).font(.system(size: 13)).foregroundStyle(Color.steel).multilineTextAlignment(.center).frame(maxWidth: 520)
             HStack {
                 Button("Try again") { if let s = model.setup { Task { await model.launch(s) } } }.gccButton(.primary)
@@ -247,7 +254,7 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if isFirstRun {
-                Text("GCODE CONTROLLER").font(.custom("Helvetica", size: 15).weight(.bold)).tracking(4).foregroundStyle(Color.gold)
+                Text("KERFLINE").font(.custom("Helvetica", size: 15).weight(.bold)).tracking(4).foregroundStyle(Color.gold)
                 Text("How does this Mac fit in?").font(.system(size: 20, weight: .semibold))
             } else {
                 Text("THIS MAC").font(.heading).tracking(2)
@@ -374,7 +381,7 @@ struct Starting: View {
         VStack(spacing: 14) {
             ProgressView("Starting…")
             if slow {
-                Text("Waiting for the library folder in Documents. If macOS asks whether GCode Controller can access files in your Documents folder, click Allow (the question may be behind this window).")
+                Text("Waiting for the library folder in Documents. If macOS asks whether KerfLine (GCode Controller 2.0) can access files in your Documents folder, click Allow (the question may be behind this window).")
                     .font(.system(size: 13)).foregroundStyle(Color.steel)
                     .multilineTextAlignment(.center).frame(maxWidth: 440)
             }
@@ -382,6 +389,46 @@ struct Starting: View {
         .task {
             try? await Task.sleep(for: .seconds(5))
             slow = true
+        }
+    }
+}
+
+/// Development only (GCC_HOME set): open a dialog or sheet from a script, for screenshots:
+///   swift -e 'import Foundation; DistributedNotificationCenter.default().post(name: .init("gcc.dev.show"), object: "probe")'
+/// Objects: start:<file name>, select:<file name>, probe, resume, surfacing, settings, manager, conflicts, add, none.
+@MainActor
+enum DevShow {
+    private static var observer: NSObjectProtocol?
+
+    static func listen(_ model: AppModel) {
+        guard AppSetup.devHome != nil, observer == nil else { return }
+        observer = DistributedNotificationCenter.default().addObserver(forName: .init("gcc.dev.show"), object: nil, queue: .main) { n in
+            let what = n.object as? String ?? ""
+            MainActor.assumeIsolated { show(what, model) }
+        }
+    }
+
+    private static func show(_ what: String, _ model: AppModel) {
+        model.dialog = nil
+        model.confirmStart = nil
+        model.managerOpen = false
+        model.conflictsOpen = false
+        model.uploadOpen = false
+        switch what {
+        case "probe": model.dialog = .probe
+        case "resume": model.dialog = .resume
+        case "surfacing": model.dialog = .surfacing
+        case "settings": model.dialog = .settings
+        case "manager": model.managerOpen = true
+        case "conflicts": model.conflictsOpen = true
+        case "add": model.uploadOpen = true
+        default:
+            if what.hasPrefix("start:"), let f = model.state?.library.first(where: { $0.name == what.dropFirst(6) }) {
+                model.previewId = f.id
+                model.confirmStart = StartRequest(fileId: f.id, next: false)
+            } else if what.hasPrefix("select:"), let f = model.state?.library.first(where: { $0.name == what.dropFirst(7) }) {
+                model.previewId = f.id
+            }
         }
     }
 }

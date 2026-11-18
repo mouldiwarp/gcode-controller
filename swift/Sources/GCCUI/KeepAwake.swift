@@ -17,7 +17,7 @@ final class KeepAwake {
     func set(_ on: Bool) -> Bool {
         if on, assertion == 0 {
             var id: IOPMAssertionID = 0
-            let reason = "GCode Controller is connected to the CNC machine" as CFString
+            let reason = "KerfLine is connected to the CNC machine" as CFString
             guard IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleSystemSleep as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn), reason, &id) == kIOReturnSuccess
             else { return false }
             assertion = id
