@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { connect, useStore } from './store.ts';
 import { TopBar, Banners } from './components/TopBar.tsx';
 import { UpdateBanner } from './components/UpdateBanner.tsx';
+import { StartupCheck } from './components/StartupCheck.tsx';
 import { DroPanel } from './components/Dro.tsx';
 import { JogPanel } from './components/Jog.tsx';
 import { Visualizer } from './components/Visualizer.tsx';
@@ -41,6 +42,7 @@ export function App() {
       <TopBar />
       <div>
         <UpdateBanner />
+        <StartupCheck />
         <Banners />
       </div>
       <main className="main" ref={mainRef}>

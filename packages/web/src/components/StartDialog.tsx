@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { formatDuration } from '@gcc/shared';
+import { checkSettings, FOXALIEN, formatDuration } from '@gcc/shared';
 import { useStore } from '../store.ts';
 
 /** Starting a job moves a machine that may be in another room, so confirm first. */
@@ -31,6 +31,8 @@ export function StartDialog() {
   const m = s.machine;
   const remote = s.link.via === 'hub';
   const b = item.cutBounds ?? item.bounds;
+  const profile = FOXALIEN;
+  const settingProblems = m.settings && Object.keys(m.settings).length && !m.simulated ? checkSettings(m.settings, profile) : [];
 
   const start = async () => {
     setBusy(true);
@@ -78,6 +80,12 @@ export function StartDialog() {
             X {m.wpos[0].toFixed(3)} · Y {m.wpos[1].toFixed(3)} · Z {m.wpos[2].toFixed(3)}
           </dd>
         </dl>
+        {settingProblems.length > 0 && (
+          <div className="banner warn" style={{ marginTop: 12 }}>
+            ⚠ {settingProblems.length === 1 ? 'A controller setting differs' : `${settingProblems.length} controller settings differ`} from {profile.name}:{' '}
+            {settingProblems.map((p) => `$${p.key} is ${p.actual ?? '?'} (should be ${p.expected})`).join(', ')}. Fix them in the banner at the top first.
+          </div>
+        )}
         <ul className="checklist">
           <li>Stock clamped and the right bit fitted and tight</li>
           {isNext ? (
@@ -94,6 +102,7 @@ export function StartDialog() {
           ) : (
             <li>Work zero set for this file (X, Y and Z)</li>
           )}
+          {profile.spindleReminder && !m.simulated && <li>{profile.spindleReminder}</li>}
           <li>Dust collection on, and nobody near the machine</li>
           {remote && <li>Someone can reach the machine's emergency stop</li>}
         </ul>

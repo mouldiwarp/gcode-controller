@@ -184,6 +184,25 @@ start dialog offers to run the rest of the group in order. After each file the s
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
 the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
+## Start-up checks
+
+Each time the controller connects, the app reads its settings and compares them with the values the FoxAlien was set up with:
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `$20` | 1 | Soft limits on |
+| `$21` | 1 | Hard limits on |
+| `$22` | 1 | Homing on |
+| `$23` | 3 | Homes front-left |
+| `$27` | 3 | Backs 3 mm off the switches |
+| `$30` | 24000 | Spindle top speed |
+| `$32` | 0 | Laser mode off |
+| `$130`–`$132` | 800, 800, 100 | Travel |
+
+Anything different is listed at the top of the page with a button to set it back. The banner also flags the app's travel if it doesn't match the controller's. When everything matches it says so and can be dismissed. The list lives in `packages/shared/src/machineCheck.ts`.
+
+Some things the controller can't report. The banner and the Start dialog remind you to check them by hand. In particular, **the controller's Laser/Spindle switch must be on LASER**: the 1.5 kW spindle takes its PWM from the laser port.
+
 ## Staying within the machine's travel
 
 Soft limits are off on the FoxAlien (`$20=0`), so GRBL will drive into a limit switch if asked. Hitting one stops the machine dead in ALARM, often reported as ALARM 3, and the position is then lost. Once the machine is homed, the app checks every move against the travel set in Settings:

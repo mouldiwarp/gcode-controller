@@ -1612,3 +1612,42 @@ label.field {
   color: var(--warn);
   margin: -4px 0 10px;
 }
+
+/* ---- Start-up settings check ---- */
+
+.banner.startup {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.banner.startup .update-row {
+  flex-wrap: wrap;
+}
+
+.startup-table td:first-child,
+.startup-table td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.startup-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.startup-table td {
+  padding: 4px 8px 4px 0;
+  vertical-align: middle;
+}
+
+.startup-table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.startup-line {
+  margin-top: 6px;
+  font-size: 13px;
+}
