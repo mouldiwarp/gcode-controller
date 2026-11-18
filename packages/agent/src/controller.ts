@@ -249,6 +249,17 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     if (s.feed !== undefined) patch.feed = s.feed;
     if (s.spindle !== undefined) patch.spindle = s.spindle;
     if (s.overrides) patch.overrides = s.overrides;
+    // Some boards refuse $$ in the alarm state they boot into: read the settings once idle.
+    if (
+      s.state === 'Idle' &&
+      this.machine.connection === 'connected' &&
+      !this.settingsDraft &&
+      !Object.keys(this.machine.settings ?? {}).length &&
+      Date.now() - this.lastSettingsAsk > 5000
+    ) {
+      this.lastSettingsAsk = Date.now();
+      queueMicrotask(() => this.queryState());
+    }
     if (s.buffer) {
       patch.buffer = s.buffer;
       this.checkForLostReplies(s.state, s.buffer);
@@ -370,6 +381,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     for (const p of pending) p.resolve?.({ ok: false, error: reason });
   }
 
+  private lastSettingsAsk = 0;
   private maxRxFree = 0;
   private maxPlannerFree = 0;
 
