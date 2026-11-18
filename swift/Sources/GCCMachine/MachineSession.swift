@@ -96,6 +96,8 @@ public actor MachineSession {
     private var maxPlannerFree = 0
     /// Counts machine updates, so a wait can tell a fresh status report arrived.
     private var machineUpdates = 0
+    /// Counts controller resets (banners), so a multi-step command can tell one happened between its steps.
+    private var resets = 0
 
     private var subscribers: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
 
@@ -300,6 +302,7 @@ public actor MachineSession {
 
     private func onWelcome(_ line: String) {
         welcomeTask?.cancel()
+        resets += 1
         let wasConnecting = machine.connection == .connecting
         log(.in, line)
         // A banner means the controller reset: everything in flight is gone.
@@ -862,10 +865,15 @@ public actor MachineSession {
             machineChanged()
             return MachineError(message)
         }
+        let startResets = resets
         func step(_ text: String) async throws {
+            // A reset between steps (Reset pressed, or the board rebooted) ends the cycle: the next
+            // step must not run on a machine that has just been reset.
+            if resets != startResets || transport == nil { throw fail("Probing stopped: the controller reset") }
             log(.out, text, by: by)
             lastAlarmCode = nil
             let r = await enqueue(QueuedLine(text: text, kind: .user, by: by, echo: true))
+            if resets != startResets && lastAlarmCode == nil { throw fail("Probing stopped: the controller reset") }
             if r.ok { return }
             if lastAlarmCode == 5 { throw fail("No contact within \(jsNumber(p.maxTravel)) mm. Check the clip and plate, then unlock to continue") }
             if lastAlarmCode == 4 { throw fail("The probe input was already closed when probing started. Check the clip, then unlock") }
@@ -889,6 +897,7 @@ public actor MachineSession {
         try await step("G0Z\(fmt(p.plateThickness + p.retract))")
         try await step("G4P0.01") // a dwell is answered only once motion has stopped
         await waitForIdle()
+        if resets != startResets { throw fail("Probing stopped: the controller reset") }
         let message = "Z zeroed on the stock surface (plate \(jsNumber(p.plateThickness)) mm). Remove the plate and clip"
         log(.info, message, by: by)
         machine.probing = false
