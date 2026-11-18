@@ -29,6 +29,17 @@ public struct StartRequest: Identifiable, Equatable {
     public var next: Bool
 }
 
+/// Where updating this Mac's app has got to.
+public enum UpdateStatus: Equatable, Sendable {
+    case idle
+    case checking
+    case available(UpdateCheck)
+    case running(String)
+    /// Pulled and rebuilt: restart to run it (held while a job runs here).
+    case ready
+    case failed(String)
+}
+
 @MainActor @Observable
 public final class AppModel {
     public private(set) var setup: AppSetup?
@@ -64,7 +75,16 @@ public final class AppModel {
     private var lastAlarm: Int?
     private let notifications: Bool
 
-    public init() {
+    // MARK: Updates and keep-awake
+    public let build: BuildInfo
+    public private(set) var update: UpdateStatus = .idle
+    private var checkTask: Task<Void, Never>?
+    private let keepAwake = KeepAwake()
+    /// Keeping this Mac awake because it owns the machine.
+    public var keepingAwake: Bool { keepAwake.isOn }
+
+    public init(build: BuildInfo = .current) {
+        self.build = build
         // Notifications need an app bundle (not `swift run`).
         notifications = Bundle.main.bundleIdentifier != nil
         if notifications { UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in } }
@@ -85,7 +105,10 @@ public final class AppModel {
             if setup.role == .hub { try FileManager.default.createDirectory(at: setup.inbox, withIntermediateDirectories: true) }
             let library = try await Library.open(setup.libraryOptions)
             await library.watch()
-            try await attach(Instance(setup.instanceOptions, library: library))
+            var options = setup.instanceOptions
+            options.code = build.code
+            try await attach(Instance(options, library: library))
+            startUpdateChecks()
             // Take the machine if it's plugged in here (and keep trying until it is).
             if setup.machine != .none, await instance?.owner() == Instance.Owner.none {
                 try? await instance?.execute(.connect(port: nil), by: setup.name)
@@ -98,6 +121,10 @@ public final class AppModel {
     /// Run an instance (tests pass their own).
     public func attach(_ instance: Instance) async throws {
         self.instance = instance
+        await instance.setUpdater { [weak self] in
+            guard let self else { return }
+            try await self.beginUpdate()
+        }
         let events = await instance.events()
         eventTask = Task { [weak self] in
             for await e in events { self?.handle(e) }
@@ -109,6 +136,9 @@ public final class AppModel {
     public func shutdown() async {
         eventTask?.cancel()
         eventTask = nil
+        checkTask?.cancel()
+        checkTask = nil
+        keepAwake.set(false)
         if let instance {
             await instance.stop()
             await instance.library.close()
@@ -143,6 +173,7 @@ public final class AppModel {
             if !s.config.jogSteps.contains(jogStep) { jogStep = s.config.jogSteps.dropFirst().first ?? 1 }
         }
         noticeChanges(s)
+        keepAwake.set(s.link.machineOn == name && s.machine.connection != .disconnected)
         let first = state == nil
         state = s
         if first { devOpen(s) }
@@ -275,6 +306,93 @@ public final class AppModel {
     public var selected: LibraryItem? { state?.library.first { $0.id == previewId } }
 
     public func conflict(for fileId: String) -> LibraryConflict? { conflicts.first { $0.entryId == fileId } }
+
+    // MARK: Updates
+
+    /// How the other Mac's code compares with this one's (.ahead: it's behind).
+    public var peerCode: CodeComparison { compareCode(build.code, state?.link.peerCode) }
+
+    /// The other Mac's role, while linked.
+    public var peerRole: UpdateTarget? {
+        guard let s = state, s.link.peerCode != nil || (s.link.hubConnected && s.link.agentConnected) else { return nil }
+        return s.link.via == .hub ? .agent : .hub
+    }
+
+    private func updater() -> Updater? {
+        guard build.canUpdate, let repo = build.repo, let app = build.bundle else { return nil }
+        return Updater(repo: repo, built: build.code.commit, installDir: app.deletingLastPathComponent())
+    }
+
+    /// Check soon after launch, then every few hours.
+    private func startUpdateChecks() {
+        guard checkTask == nil, build.canUpdate else { return }
+        checkTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            while !Task.isCancelled {
+                await self?.checkForUpdates(manual: false)
+                try? await Task.sleep(for: .seconds(4 * 3600))
+            }
+        }
+    }
+
+    public func checkForUpdates(manual: Bool) async {
+        guard let u = updater() else {
+            if manual { toast(.warn, "This copy can't update itself: it wasn't installed with scripts/build-app.sh") }
+            return
+        }
+        switch update {
+        case .running, .ready: return
+        default: break
+        }
+        if manual { update = .checking }
+        do {
+            let c = try await u.check()
+            update = c.behind > 0 ? .available(c) : .idle
+            if manual, c.behind == 0 { toast(.info, "Up to date (\(build.code.shortCommit))") }
+        } catch {
+            if case .checking = update { update = .idle }
+            if manual { toast(.error, "Couldn't check for updates: \(error.localizedDescription)") }
+        }
+    }
+
+    /// Pull, rebuild and reinstall, then restart (from this Mac's banner, or asked by the other Mac).
+    /// Returns once it's under way; throws if it can't start.
+    public func beginUpdate() throws {
+        guard let u = updater() else { throw UpdateError("\(name) can't update itself: it wasn't installed with scripts/build-app.sh") }
+        if case .running = update { throw UpdateError("\(name) is already updating") }
+        if jobRunningHere { throw UpdateError("A job is running on \(name). Update it when the job has finished") }
+        update = .running("Starting")
+        Task { await performUpdate(u) }
+    }
+
+    private func performUpdate(_ u: Updater) async {
+        do {
+            try await u.update { [weak self] step in await self?.updateStep(step) }
+            update = .ready
+            if jobRunningHere {
+                await instance?.announce(.info, "\(name) is updated. Restart it when the job has finished")
+            } else {
+                await instance?.announce(.info, "\(name) is updated. Restarting…")
+                restartNow()
+            }
+        } catch {
+            update = .failed(error.localizedDescription)
+            await instance?.announce(.error, "\(name) couldn't update: \(error.localizedDescription)")
+        }
+    }
+
+    private func updateStep(_ step: String) async {
+        update = .running(step)
+        await instance?.announce(.info, "\(name): \(step)…")
+    }
+
+    /// Quit and open the newly built app.
+    public func restartNow() {
+        guard !jobRunningHere, let app = build.bundle else { return }
+        do { try relaunch(app) } catch { toast(.error, "Couldn't restart: \(error.localizedDescription). Quit and open it again") }
+    }
+
+    public func dismissUpdate() { update = .idle }
 
     /// A job is running on this Mac's machine (quitting would stop it).
     public var jobRunningHere: Bool {

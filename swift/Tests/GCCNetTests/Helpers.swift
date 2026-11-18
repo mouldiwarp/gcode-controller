@@ -49,10 +49,10 @@ final class Macs: @unchecked Sendable {
     var hub: Instance!
     var agent: Instance!
 
-    func startHub(machine: MachineOption = .none, inbox: URL? = nil) async throws {
+    func startHub(machine: MachineOption = .none, inbox: URL? = nil, code: CodeVersion? = nil) async throws {
         let lib = try await hubBox.open()
         hub = Instance(
-            InstanceOptions(name: "Design", role: .hub, host: "127.0.0.1", port: 0, advertise: false, machine: machine, inbox: inbox, pollMs: 50),
+            InstanceOptions(name: "Design", role: .hub, host: "127.0.0.1", port: 0, advertise: false, machine: machine, inbox: inbox, pollMs: 50, code: code),
             library: lib)
         try await hub.start()
     }
@@ -61,11 +61,11 @@ final class Macs: @unchecked Sendable {
         get async { "http://127.0.0.1:\(await hub.port!)" }
     }
 
-    func startAgent(machine: MachineOption = fastSim) async throws {
+    func startAgent(machine: MachineOption = fastSim, code: CodeVersion? = nil) async throws {
         let lib = try await agentBox.open()
         let url = URL(string: "ws://127.0.0.1:\(await hub.port!)/link")!
         agent = Instance(
-            InstanceOptions(name: "Garage", role: .agent, hubURL: url, machine: machine, pollMs: 50, redialSeconds: 0.2), library: lib)
+            InstanceOptions(name: "Garage", role: .agent, hubURL: url, machine: machine, pollMs: 50, redialSeconds: 0.2, code: code), library: lib)
         try await agent.start()
     }
 

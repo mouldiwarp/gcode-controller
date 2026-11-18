@@ -269,4 +269,37 @@ actor Got {
         #expect(await m.agent.session.job.status == .running)
         #expect(await until(20000) { await m.agent.session.job.status == .done })
     }
+
+    @Test func eachMacKnowsTheOthersCodeAndCanAskItToUpdate() async throws {
+        let m = Macs()
+        let old = CodeVersion(version: "2.0.0", commit: "aaaaaaa1", time: 1_000)
+        let new = CodeVersion(version: "2.0.0", commit: "bbbbbbb2", time: 2_000)
+        try await m.startHub(code: new)
+        try await m.startAgent(machine: .none, code: old)
+        defer { Task { await m.stop() } }
+        #expect(await m.linked())
+        #expect(await until { await m.hub.state().link.peerCode == old })
+        #expect(await m.agent.state().link.peerCode == new)
+        #expect(compareCode(new, await m.hub.state().link.peerCode) == .ahead)
+
+        // Without an updater, the garage refuses (and the refusal comes back to the hub).
+        await #expect(throws: MachineError("Garage can't update itself")) {
+            try await m.hub.execute(.update(target: .agent), by: "Design")
+        }
+        // With one, the hub's request runs it in the garage.
+        let asked = Counter()
+        await m.agent.setUpdater { await asked.add() }
+        try await m.hub.execute(.update(target: .agent), by: "Design")
+        #expect(await asked.n == 1)
+        // A refusal to start (a job running there) comes back too.
+        await m.agent.setUpdater { throw MachineError("A job is running on Garage") }
+        await #expect(throws: MachineError("A job is running on Garage")) {
+            try await m.hub.execute(.update(target: .agent), by: "Design")
+        }
+    }
+}
+
+actor Counter {
+    var n = 0
+    func add() { n += 1 }
 }

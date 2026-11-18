@@ -46,12 +46,15 @@ public struct InstanceOptions: Sendable {
     public var reconnectSeconds: Double
     /// How long a relayed command may take.
     public var relayTimeout: Double
+    /// The code this app runs, sent to the other Mac.
+    public var code: CodeVersion?
 
     public init(
         name: String, role: Role, host: String = "0.0.0.0", port: Int = defaultHubPort, advertise: Bool = true, serviceType: String = hubServiceType, hubURL: URL? = nil,
         machine: MachineOption = .serial(path: nil), inbox: URL? = nil, pollMs: Int = 150, redialSeconds: Double = 2,
-        reconnectSeconds: Double = 3, relayTimeout: Double = 30
+        reconnectSeconds: Double = 3, relayTimeout: Double = 30, code: CodeVersion? = nil
     ) {
+        self.code = code
         self.name = name
         self.role = role
         self.host = host
@@ -186,6 +189,14 @@ public actor Instance {
     }
 
     /// Show a notification on both Macs.
+    /// Starts updating this Mac (returns once it's under way; throws if it can't start).
+    private var updater: (@Sendable () async throws -> Void)?
+
+    public func setUpdater(_ f: (@Sendable () async throws -> Void)?) { updater = f }
+
+    /// A message on both Macs.
+    public func announce(_ level: Toast.Level, _ text: String) { notify(level, text) }
+
     func notify(_ level: Toast.Level, _ text: String) {
         let t = Toast(level, text)
         emit(.toast(t))
@@ -227,7 +238,7 @@ public actor Instance {
         let link = LinkState(
             hubConnected: options.role == .hub || linked, agentConnected: options.role == .agent || linked, via: options.role,
             hubName: options.role == .hub ? options.name : peer?.name, agentName: options.role == .agent ? options.name : peer?.name,
-            machineOn: machineOn)
+            machineOn: machineOn, peerCode: peer?.code)
         return AppState(
             link: link, machine: view.machine, job: view.job, library: await library.items(), folders: await library.folders(),
             libraryRoot: library.root.path, macros: await library.macros(), config: await library.config(), console: view.console)
@@ -254,7 +265,16 @@ public actor Instance {
             try await libraryCommand(cmd)
             return
         }
-        if case .update = cmd { throw MachineError("Updating from the app isn't available yet") }
+        if case .update(let target) = cmd {
+            // Update this Mac, or ask the other one to update itself.
+            if target.rawValue == options.role.rawValue || relayed {
+                guard let updater else { throw MachineError("\(options.name) can't update itself") }
+                try await updater()
+            } else {
+                try await relay(cmd, by: by)
+            }
+            return
+        }
         switch await owner() {
         case .here:
             try await local(cmd, by: by)
@@ -488,7 +508,7 @@ public actor Instance {
             detached(old)
         }
         link = conn
-        conn.send(.hello(Hello(name: options.name, role: options.role, version: linkProtocolVersion, replica: library.replica)))
+        conn.send(.hello(Hello(name: options.name, role: options.role, version: linkProtocolVersion, replica: library.replica, code: options.code)))
         conn.send(.snapshot(MachineView(machine: await session.machine, job: await session.job, console: await session.console)))
     }
 

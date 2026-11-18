@@ -79,6 +79,7 @@ struct Banners: View {
     var body: some View {
         VStack(spacing: 0) {
             StartupCheck(s: s)
+            UpdateBanner(s: s)
             if s.link.via == .agent, !s.link.hubConnected {
                 Banner(kind: .info, text: "Hub offline: working on this Mac's copy of the library. Changes sync when it's back.")
             }

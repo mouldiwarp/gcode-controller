@@ -27,6 +27,8 @@ public struct Hello: Codable, Sendable, Equatable {
     public var version: Int
     /// The library replica, so a Mac never links to itself.
     public var replica: String
+    /// The code it runs (to offer updating whichever Mac is behind).
+    public var code: CodeVersion? = nil
 }
 
 /// One Mac's machine, as its MachineSession sees it.
@@ -80,8 +82,13 @@ public struct LinkState: Codable, Sendable, Equatable {
     public var agentName: String?
     /// The Mac the machine is plugged into, when it's connected.
     public var machineOn: String?
+    /// The code the other Mac runs, while linked.
+    public var peerCode: CodeVersion?
 
-    public init(hubConnected: Bool, agentConnected: Bool, via: Role, hubName: String? = nil, agentName: String? = nil, machineOn: String? = nil) {
+    public init(
+        hubConnected: Bool, agentConnected: Bool, via: Role, hubName: String? = nil, agentName: String? = nil, machineOn: String? = nil, peerCode: CodeVersion? = nil
+    ) {
+        self.peerCode = peerCode
         self.hubConnected = hubConnected
         self.agentConnected = agentConnected
         self.via = via

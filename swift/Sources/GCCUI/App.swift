@@ -313,6 +313,10 @@ struct AppCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { Task { await model.checkForUpdates(manual: true) } }
+                .disabled({ if case .running = model.update { true } else { false } }())
+        }
         CommandGroup(replacing: .newItem) {
             Button("Add to Library…") { model.uploadOpen = true }.keyboardShortcut("o")
                 .disabled(model.state == nil)

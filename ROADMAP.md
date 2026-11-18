@@ -37,6 +37,12 @@ swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected 
 
 `gcc stream` prints the console and progress, and Ctrl-C stops the job (feed hold, then reset).
 
+Install the app on each Mac with `scripts/build-app.sh` (about a minute; it installs
+"GCode Controller 2.0" in `~/Applications`, beside 1.0's app, and adds no login item). After that it
+updates itself: it checks GitHub every few hours (or GCode Controller 2.0 ▸ Check for Updates…),
+and **Update now** pulls, rebuilds and restarts it. Either Mac can ask the other to update when it's
+behind. Neither updates while a job runs on it. While a Mac has the machine on USB it's kept awake.
+
 | Phase | What | Status |
 |---|---|---|
 | 1 | Core: G-code, GRBL protocol, state and commands, resume, progress, travel, surfacing, settings check (ported and checked identical to 1.0) | ✅ |
@@ -45,7 +51,7 @@ swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected 
 | 4 | Network and sync: hub API (Swarf/Fretboard unchanged), Bonjour, inbox, link between the Macs with either-Mac machine ownership and command relay, library sync and conflicts (log compaction deferred) | ✅ |
 | 5 | App shell: role picker (with a trial mode that leaves 1.0 alone), main window with every panel except 3D, keyboard jog, menus, toasts, library manager (folders, version history, Trash), conflict badges and dialog. Agent-alone-when-hub-is-down not yet tried on two Macs | ✅ |
 | 6 | Metal 3D view and every dialog | ✅ |
-| 7 | Build, install and self-update | ⬜ |
+| 7 | Build, install and self-update: `scripts/build-app.sh`, update from git (either Mac can update the other), keep-awake while it owns the machine | ✅ |
 | 8 | Cut-over on both Macs, real-machine checks, tag v2.0 | ⬜ |
 | 9 | Later: signed, notarized DMG | 💡 |
 
