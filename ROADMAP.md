@@ -56,7 +56,9 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
 | 9 | Signed releases: Developer ID signing, the app's final name, release builds on GitHub, updates from Releases (see below) | ⬜ waiting for the Apple Developer membership |
 
 ### Phase 9: signed releases
-- ⬜ **Name**: agree the published name, then rename the app, its bundle id and the docs.
+- ✅ **Name** agreed: **KerfLine**, "a GRBL sender built for the FoxAlien XE-Ultra 8080 and other GRBL 1.1 machines",
+  with a line saying it isn't affiliated with or endorsed by FoxAlien. No FoxAlien logo, colours or "official".
+- ⬜ Rename the app, bundle id, repo and docs to KerfLine, together with signing so macOS's permissions only reset once.
 - ⬜ **Developer ID signing** in `scripts/build-app.sh` (hardened runtime, timestamp), falling back to ad-hoc without the certificate.
   The same signature on every build lets macOS keep the Documents, Local Network and USB permissions across updates.
 - ⬜ **Release workflow**: pushing a tag `vX.Y` builds the app on GitHub's macOS 26 runner, signs it (certificate
