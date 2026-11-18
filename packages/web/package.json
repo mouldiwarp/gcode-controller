@@ -8,7 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@gcc/shared": "0.1.0",
+    "@gcc/shared": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0",
