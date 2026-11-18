@@ -7,10 +7,17 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "GCCCore", targets: ["GCCCore"]),
+        .library(name: "GCCMachine", targets: ["GCCMachine"]),
+        .executable(name: "gcc", targets: ["gcc"]),
     ],
     targets: [
         // Pure Swift, no I/O: G-code, GRBL protocol, shared state, resume, progress, travel, surfacing.
         .target(name: "GCCCore"),
+        // The machine: USB serial, the GRBL simulator, and the streaming session (1.0's controller).
+        .target(name: "GCCMachine", dependencies: ["GCCCore"]),
+        // Headless sender: `gcc ports`, `gcc stream [--simulate | --port P] file.nc`.
+        .executableTarget(name: "gcc", dependencies: ["GCCMachine"]),
         .testTarget(name: "GCCCoreTests", dependencies: ["GCCCore"]),
+        .testTarget(name: "GCCMachineTests", dependencies: ["GCCMachine"]),
     ]
 )

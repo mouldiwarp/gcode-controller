@@ -26,12 +26,21 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 1.0 stays in service until 2.0 matches it. The 2.0 app is a single app that asks on first launch
 whether this Mac is the hub or the agent. Either Mac can drive the FoxAlien over USB, and the
 library is kept fully in sync on both Macs, with conflicts resolved by asking. There's no browser.
-The code is in `swift/`.
+The code is in `swift/`. Try the machine layer from the command line:
+
+```sh
+cd swift
+swift run gcc ports                                   # serial ports (* = looks like GRBL)
+swift run gcc stream --simulate ../samples/test-square.nc
+swift run gcc stream ../samples/test-square.nc        # USB, port auto-detected (or --port PATH)
+```
+
+`gcc stream` prints the console and progress, and Ctrl-C stops the job (feed hold, then reset).
 
 | Phase | What | Status |
 |---|---|---|
 | 1 | Core: G-code, GRBL protocol, state and commands, resume, progress, travel, surfacing, settings check (ported and checked identical to 1.0) | ✅ |
-| 2 | Machine: serial port, simulator, streaming session, `gcc` command-line streamer | ⬜ |
+| 2 | Machine: serial port, simulator, streaming session (1.0's controller tests all ported), `gcc` command-line streamer. Real-machine air cut with `gcc stream` still to do | ✅ |
 | 3 | Library on disk: blobs, SQLite, Finder folder, history, Trash, 1.0 import | ⬜ |
 | 4 | Network and sync: hub API (Swarf/Fretboard unchanged), Bonjour, link between the Macs, library sync and conflicts | ⬜ |
 | 5 | App shell: role picker, main window, panels, library UI with conflicts | ⬜ |
