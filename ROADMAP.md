@@ -33,8 +33,8 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 - ⬜ First air cut of `samples/test-square.nc` with Z zeroed 20 mm above the stock.
 
 ### Workflow features (from UGS and WorkBee)
-- ⬜ **Progress by time, not lines.** GRBL acknowledges lines when it queues them, so % and the time left run
-  ahead on files with few long moves (surfacing). Weight progress by each line's estimated time instead.
+- ✅ **Progress by time, not lines.** The % and time left follow the line the machine is cutting (not the
+  lines GRBL has queued), weighted by each line's estimated time and how far along it the tool is.
 - ✅ **Z probe with a touch plate** (`G38.2`): a fast touch then a slow one, with plate thickness in Settings.
 - ✅ **Run a job group in order**, stopping for a bit change and a Z re-probe between files.
 - ⬜ Probe X/Y corners with the touch plate (corner-finding), as WorkBee's XYZ probe block does.
