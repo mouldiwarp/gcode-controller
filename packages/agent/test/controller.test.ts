@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanLine } from '@gcc/shared';
-import { DEFAULT_CONFIG, stateAt, streamableLines } from '@gcc/shared';
+import { DEFAULT_CONFIG, jobPercent, stateAt, streamableLines } from '@gcc/shared';
 import { GrblController } from '../src/controller.ts';
 import { FakeGrbl } from '../src/sim/fakeGrbl.ts';
 
@@ -159,6 +159,31 @@ describe('GrblController', () => {
     expect(ctl.job.error).toBeUndefined();
     expect(ctl.job.status).toBe('done');
     expect(ctl.console.some((l) => l.text.includes('Cleared stray characters'))).toBe(true);
+  });
+
+  it('reports progress by machine time, not by lines GRBL has queued', async () => {
+    await setup({ speed: 5 });
+    // One long cut (10 s), then 30 short moves (3 s between them).
+    const text = ['G21 G90', 'G0 X0 Y0 Z0', 'G1 X100 F600', ...Array.from({ length: 30 }, (_, i) => `G1 X${100 + ((i % 2) + 1) * 0.5} F600`)].join('\n');
+    ctl.startJob(text, { fileId: 'f1', fileName: 'long.nc' });
+    const w = () => ctl.machine.wpos;
+    // On the long cut: back at Y0 Z0 after the rapid, part way along X.
+    await until(() => ctl.machine.status === 'Run' && Math.abs(w()[1]) < 1e-3 && Math.abs(w()[2]) < 1e-3 && w()[0] > 30 && w()[0] < 80);
+    await wait(150);
+    // GRBL has taken nearly every line, but the cutter is still on the long one.
+    expect(ctl.job.ackedLines).toBeGreaterThan(12); // the sim queues 15 moves
+    expect(ctl.job.cuttingLine).toBe(2);
+    const pct = jobPercent(ctl.job);
+    expect(pct).toBeGreaterThan(20);
+    expect(pct).toBeLessThan(80);
+    // It advances with the tool along the cut: 1 mm of X is 0.1 s at F600.
+    const [d1, x1] = [ctl.job.doneSeconds!, w()[0]];
+    await wait(300);
+    const [d2, x2] = [ctl.job.doneSeconds!, w()[0]];
+    expect(d2).toBeGreaterThan(d1);
+    expect(Math.abs(d2 - d1 - (x2 - x1) / 10)).toBeLessThan(0.6);
+    await until(() => ctl.job.status === 'done', 15000);
+    expect(jobPercent(ctl.job)).toBe(100);
   });
 
   it('stops and restarts the spindle while paused', async () => {

@@ -13,6 +13,10 @@ import {
   initialMachine,
   isMotionLine,
   planResume,
+  lineAtPosition,
+  progressModel,
+  secondsDone,
+  type ProgressModel,
   streamableLines,
   type Command,
   type ConsoleLine,
@@ -69,6 +73,8 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   private jobPreamble = 0;
   /** Latest buffer report, to tell which line the cutter is on. */
   private lastBuf?: { planner: number; rx: number };
+  /** Estimated time per line of the running program, for progress. */
+  private progress?: ProgressModel;
   /** jobAcked when that buffer report arrived. */
   private jobAckedAtStatus = 0;
   private jobCursor = 0;
@@ -276,6 +282,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       // GRBL sends replies in order, so this report counts exactly the lines acknowledged so far.
       this.jobAckedAtStatus = this.jobAcked;
       this.checkForLostReplies(s.state, s.buffer);
+      if (this.job.status === 'running' || this.job.status === 'paused') this.trackProgress(patch.wpos ?? this.machine.wpos);
     }
     patch.pins = s.pins;
     patch.accessories = s.accessories;
@@ -450,6 +457,9 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       for (const w of plan.state.warnings) this.log('info', `Resume: ${w}`, meta.by);
     }
     this.jobLines = [...preamble.map((t) => ({ text: t, source: -1 })), ...lines.slice(from)];
+    // From where the tool is now, so the first moves out to the work get their time too.
+    this.progress = progressModel(text, { rapidRate: this.config?.rapidRate, from: from === 0 ? this.machine.wpos : undefined });
+    const startSeconds = secondsDone(this.progress, from);
     this.jobPreamble = preamble.length;
     this.jobAcked = 0;
     this.jobAckedAtStatus = 0;
@@ -463,6 +473,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       totalLines: lines.length,
       ackedLines: from,
       firstLine: from,
+      cuttingLine: from,
+      totalSeconds: this.progress.total,
+      doneSeconds: startSeconds,
+      startSeconds,
       startedAt: Date.now(),
       startedBy: meta.by,
       estSeconds: meta.estSeconds ? (meta.estSeconds * (lines.length - from)) / lines.length : undefined,
@@ -510,6 +524,23 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     return Math.min(line, this.job.totalLines - 1);
   }
 
+  /** Where the machine has got to: the line it's executing and the estimated time done. */
+  private trackProgress(wpos: Vec3): void {
+    const lowest = this.currentLine();
+    if (lowest === undefined || !this.progress) return;
+    // During a resume's set-up moves the tool isn't on the program's path yet.
+    const settingUp = this.jobAckedAtStatus <= this.jobPreamble;
+    // Counting queued moves can land early (GRBL skips moves to where the tool already is, and
+    // splits arcs into many moves), so go forward to the line whose path the tool is on.
+    const highest = (this.job.firstLine ?? 0) + this.jobAckedAtStatus - this.jobPreamble - 1;
+    const line = settingUp ? lowest : Math.max(lowest, lineAtPosition(this.progress, lowest, highest, wpos));
+    const done = Math.max(this.job.startSeconds ?? 0, secondsDone(this.progress, line, settingUp ? undefined : wpos));
+    if (line === this.job.cuttingLine && Math.abs(done - (this.job.doneSeconds ?? 0)) < 0.5) return;
+    this.job.cuttingLine = line;
+    this.job.doneSeconds = done;
+    this.scheduleJobEmit();
+  }
+
   private pauseOnError(message: string): void {
     this.jobSuspended = true;
     this.realtime(RT.FEED_HOLD);
@@ -545,7 +576,11 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       this.job.pausedMs += this.job.finishedAt - this.job.pausedAt;
       this.job.pausedAt = undefined;
     }
-    if (status === 'done') this.job.ackedLines = this.job.totalLines;
+    if (status === 'done') {
+      this.job.ackedLines = this.job.totalLines;
+      this.job.cuttingLine = undefined;
+      if (this.job.totalSeconds) this.job.doneSeconds = this.job.totalSeconds;
+    }
     this.jobLines = [];
     this.emit('job', this.job);
     this.log('info', status === 'done' ? `Job complete: ${this.job.fileName}` : `Job stopped: ${this.job.fileName}`);

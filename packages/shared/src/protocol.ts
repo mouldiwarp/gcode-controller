@@ -80,6 +80,13 @@ export interface JobState {
   firstLine?: number;
   /** After a stop or failure: the stream line the cutter was on, to resume from. */
   resumeLine?: number;
+  /** Stream line the machine is executing now (behind ackedLines by what GRBL has queued). */
+  cuttingLine?: number;
+  /** Estimated seconds of the whole program, and how many of them the machine has done. */
+  totalSeconds?: number;
+  doneSeconds?: number;
+  /** doneSeconds when this run started (non-zero for a resume). */
+  startSeconds?: number;
 }
 
 export interface LibraryItem {
@@ -383,5 +390,8 @@ export function jobPercent(job: JobState): number {
   if (!job.totalLines) return 0;
   if (job.status === 'done') return 100;
   if (job.status === 'toolchange') return 100;
+  // By estimated machine time when known: lines say little (GRBL acknowledges queued moves, and
+  // one line can take a minute while hundreds of others take a second between them).
+  if (job.totalSeconds && job.doneSeconds !== undefined) return Math.min(100, (job.doneSeconds / job.totalSeconds) * 100);
   return Math.min(100, (job.ackedLines / job.totalLines) * 100);
 }

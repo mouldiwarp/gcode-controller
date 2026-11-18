@@ -29,11 +29,18 @@ export function ProgressPanel() {
   const elapsed = jobElapsedSeconds(job);
   // Blend the CAM estimate with the observed rate once there's enough progress to trust it.
   let remaining: number | undefined;
-  if (job.status === 'running' || job.status === 'paused') {
+  if ((job.status === 'running' || job.status === 'paused') && job.totalSeconds && job.doneSeconds !== undefined) {
+    // The plan's estimate leaves out acceleration, so scale it by how this run is actually going.
+    const left = Math.max(0, job.totalSeconds - job.doneSeconds);
+    const doneThisRun = job.doneSeconds - (job.startSeconds ?? 0);
+    const pace = doneThisRun > Math.min(60, job.totalSeconds * 0.03) && elapsed > 5 ? elapsed / doneThisRun : undefined;
+    remaining = pace !== undefined ? left * (doneThisRun < job.totalSeconds * 0.2 ? (pace + 1) / 2 : pace) : left;
+  } else if (job.status === 'running' || job.status === 'paused') {
     const byRate = pct > 3 ? (elapsed / pct) * (100 - pct) : undefined;
     const byEst = job.estSeconds ? Math.max(job.estSeconds - elapsed, 0) : undefined;
     remaining = byRate !== undefined && byEst !== undefined ? (pct < 20 ? (byRate + byEst) / 2 : byRate) : (byRate ?? byEst);
   }
+  const lineNow = job.status === 'done' ? job.totalLines : job.cuttingLine !== undefined ? job.cuttingLine + 1 : job.ackedLines;
 
   const fillClass = job.status === 'paused' ? 'paused' : job.status === 'error' ? 'error' : '';
 
@@ -57,7 +64,12 @@ export function ProgressPanel() {
           </div>
           <div className="progress-meta">
             <span>
-              Line <b>{job.ackedLines.toLocaleString()}</b> / {job.totalLines.toLocaleString()}
+              Line <b>{lineNow.toLocaleString()}</b> / {job.totalLines.toLocaleString()}
+              {job.cuttingLine !== undefined && job.ackedLines > lineNow && (job.status === 'running' || job.status === 'paused') && (
+                <span className="muted" title="Lines GRBL has accepted into its queue, ahead of the one it is cutting">
+                  {' '}· queued to {job.ackedLines.toLocaleString()}
+                </span>
+              )}
             </span>
             {job.error && <span style={{ color: 'var(--danger)' }}>{job.error}</span>}
           </div>

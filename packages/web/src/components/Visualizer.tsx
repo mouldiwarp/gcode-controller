@@ -84,11 +84,13 @@ export function Visualizer() {
       // Show what was really cut: up to the line it can resume from.
       if (job.resumeLine !== undefined) return job.resumeLine > 0 ? (loaded.streamSources[job.resumeLine - 1] ?? -1) : -1;
     }
+    // The agent reports the line being cut; before that (an older agent) estimate it here.
+    if (job.cuttingLine !== undefined) return job.cuttingLine > 0 ? (loaded.streamSources[job.cuttingLine - 1] ?? -1) : -1;
     const inPlanner = s.machine.buffer ? Math.max(0, plannerSize.current - s.machine.buffer.planner) : 0;
     const executed = Math.max(0, job.ackedLines - inPlanner);
     if (executed === 0) return -1;
     return loaded.streamSources[Math.min(executed, loaded.streamSources.length) - 1] ?? -1;
-  }, [loaded, showingJob, job.status, job.ackedLines, job.resumeLine, s.machine.buffer]);
+  }, [loaded, showingJob, job.status, job.ackedLines, job.resumeLine, job.cuttingLine, s.machine.buffer]);
 
   useEffect(() => {
     sceneRef.current?.setProgress(doneLine);

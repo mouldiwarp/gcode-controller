@@ -4,3 +4,4 @@ export * from './protocol.ts';
 export * from './util.ts';
 export * from './surfacing.ts';
 export * from './resume.ts';
+export * from './progress.ts';
