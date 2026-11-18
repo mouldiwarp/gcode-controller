@@ -5,3 +5,4 @@ export * from './util.ts';
 export * from './surfacing.ts';
 export * from './resume.ts';
 export * from './progress.ts';
+export * from './travel.ts';

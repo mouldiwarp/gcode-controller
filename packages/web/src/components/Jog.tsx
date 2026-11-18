@@ -71,6 +71,11 @@ export function JogPanel() {
           ← → ↑ ↓ · PgUp/PgDn
         </span>
       </h3>
+      {machineReady(s) && !s.machine.homed && (
+        <div className="jog-note" title="Until the machine is homed its position isn't known, so jogs and typed commands can run into the limit switches (ALARM)">
+          Not homed: moves aren't held within the machine's travel. Home first.
+        </div>
+      )}
       <div className="jog">
         <button className="btn" disabled={!canJog} onClick={() => jog(-1, 1)} aria-label="Jog X- Y+">
           ↖

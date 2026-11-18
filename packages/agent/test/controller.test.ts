@@ -186,6 +186,59 @@ describe('GrblController', () => {
     expect(jobPercent(ctl.job)).toBe(100);
   });
 
+  it('stops jogs at the end of travel once homed, instead of running into the limit switch', async () => {
+    await setup();
+    ctl.config = { ...DEFAULT_CONFIG }; // travel X/Y -800..0, Z -120..0
+    // Before homing the position means nothing, so jogs aren't limited.
+    expect(ctl.machine.homed).toBeFalsy();
+    await ctl.command({ type: 'home' });
+    expect(ctl.machine.homed).toBe(true);
+    await ctl.command({ type: 'jog', z: -30, feed: 3000 });
+    await until(() => ctl.machine.status === 'Idle' && ctl.machine.mpos[2] < -29.9);
+    sim.received.length = 0;
+    await ctl.command({ type: 'jog', z: 50, feed: 3000 }); // only 30 mm left
+    expect(sim.received.at(-1)).toBe('$J=G91G21Z30F3000');
+    await until(() => ctl.machine.status === 'Idle' && ctl.machine.mpos[2] > -0.01);
+    await expect(ctl.command({ type: 'jog', z: 10, feed: 3000 })).rejects.toThrow(/end of travel \(Z\+\)/);
+    // Sideways still works at the top.
+    await ctl.command({ type: 'jog', x: -10, z: 5, feed: 3000 });
+    expect(sim.received.at(-1)).toBe('$J=G91G21X-10F3000');
+    expect(ctl.machine.alarm).toBeUndefined();
+  });
+
+  it('refuses a job that would go past the top of Z from the current work zero', async () => {
+    await setup();
+    ctl.config = { ...DEFAULT_CONFIG };
+    await ctl.command({ type: 'home' });
+    await ctl.command({ type: 'jog', x: -100, y: -100, z: -3, feed: 5000 });
+    await until(() => ctl.machine.status === 'Idle' && ctl.machine.mpos[2] < -2.9);
+    await ctl.command({ type: 'zero', axes: ['X', 'Y', 'Z'] }); // Z zero 3 mm below the top
+    await until(() => Math.abs(ctl.machine.wco[2] + 3) < 1e-6);
+    const fits = { min: [0, 0, -1] as [number, number, number], max: [50, 50, 2] as [number, number, number] };
+    expect(() => ctl.checkFitsTravel(fits)).not.toThrow();
+    expect(() => ctl.checkFitsTravel({ ...fits, max: [50, 50, 5] })).toThrow(/Z by 2.0 mm past the top.*safe-Z/);
+    expect(() => ctl.checkFitsTravel({ ...fits, min: [-750, 0, -1] })).toThrow(/X by 50.0 mm past the near end/);
+  });
+
+  it('refuses typed commands and macros that would go past the end of travel, before sending any of it', async () => {
+    await setup();
+    ctl.config = { ...DEFAULT_CONFIG }; // Z -120..0
+    await ctl.command({ type: 'home' });
+    await ctl.command({ type: 'jog', z: -20, feed: 3000 });
+    await until(() => ctl.machine.status === 'Idle' && ctl.machine.mpos[2] < -19.9);
+    sim.received.length = 0;
+    // The second line, relative to where the first leaves it, ends 10 mm above the top.
+    await expect(ctl.command({ type: 'mdi', line: 'G91 G0 Z15\nG0 Z15' })).rejects.toThrow(/"G0 Z15" would go 10.0 mm past the top of Z/);
+    await expect(ctl.command({ type: 'mdi', line: 'G53 G0 X10' })).rejects.toThrow(/past the end of X/);
+    expect(sim.received).toEqual([]);
+    ctl.macros = [{ id: 'm', name: 'Park', gcode: 'G53 G0 Z5' }];
+    await expect(ctl.command({ type: 'runMacro', id: 'm' })).rejects.toThrow(/Macro "Park": "G53 G0 Z5" would go 5.0 mm past the top/);
+    // Within travel is fine, and relative moves are followed line by line.
+    await ctl.command({ type: 'mdi', line: 'G91 G0 Z10\nG0 Z5\nG90' });
+    await until(() => ctl.machine.status === 'Idle' && ctl.machine.mpos[2] > -5.1);
+    expect(ctl.machine.alarm).toBeUndefined();
+  });
+
   it('stops and restarts the spindle while paused', async () => {
     await setup({ speed: 2 });
     ctl.startJob(program(), { fileId: 'f1', fileName: 'pocket.nc' });

@@ -14,6 +14,10 @@ import {
   isMotionLine,
   planResume,
   lineAtPosition,
+  lineTarget,
+  modesFromModal,
+  travelProblem,
+  type DistanceModes,
   progressModel,
   secondsDone,
   type ProgressModel,
@@ -75,6 +79,8 @@ export class GrblController extends EventEmitter<ControllerEvents> {
   private lastBuf?: { planner: number; rx: number };
   /** Estimated time per line of the running program, for progress. */
   private progress?: ProgressModel;
+  /** GRBL's distance modes, for working out where typed commands go. */
+  private modes: DistanceModes = { absolute: true, inches: false };
   /** jobAcked when that buffer report arrived. */
   private jobAckedAtStatus = 0;
   private jobCursor = 0;
@@ -114,7 +120,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       await transport.open();
     } catch (err) {
       this.transport = undefined;
-      this.updateMachine({ connection: 'disconnected' });
+      this.updateMachine({ connection: 'disconnected', homed: false });
       this.log('error', `Could not open ${transport.name}: ${(err as Error).message}`);
       throw err;
     }
@@ -133,7 +139,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     const t = this.transport;
     this.teardown();
     if (t) await t.close().catch(() => undefined);
-    this.updateMachine({ connection: 'disconnected', status: 'Unknown' });
+    this.updateMachine({ connection: 'disconnected', status: 'Unknown', homed: false });
   }
 
   private teardown(): void {
@@ -150,7 +156,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     if (!this.transport) return;
     this.log('error', `Connection closed${err ? `: ${err.message}` : ''}`);
     this.teardown();
-    this.updateMachine({ connection: 'disconnected', status: 'Unknown' });
+    this.updateMachine({ connection: 'disconnected', status: 'Unknown', homed: false });
   }
 
   // ---------------- Incoming data ----------------
@@ -177,7 +183,7 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         const message = describeAlarm(r.code!);
         this.lastAlarmCode = r.code;
         this.log('error', `${line} ${message}`);
-        this.updateMachine({ status: 'Alarm', alarm: { code: r.code!, message } });
+        this.updateMachine({ status: 'Alarm', alarm: { code: r.code!, message }, homed: false });
         this.flushBuffers('Alarm');
         if (this.isJobActive) this.failJob(`ALARM:${r.code} ${message}`);
         return;
@@ -196,7 +202,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         return;
       }
       case 'feedback':
-        if (line.startsWith('[GC:')) this.updateMachine({ modal: line.slice(4, -1) });
+        if (line.startsWith('[GC:')) {
+          this.updateMachine({ modal: line.slice(4, -1) });
+          this.modes = modesFromModal(line);
+        }
         if (line.startsWith('[PRB:')) {
           // X,Y,Z then any extra axes (FoxAlien's 4-axis GRBL adds A), then :1 for a contact.
           const m = /^\[PRB:([-\d.]+),([-\d.]+),([-\d.]+)(?:,[-\d.]+)*:(\d)\]$/.exec(line);
@@ -287,6 +296,8 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     patch.pins = s.pins;
     patch.accessories = s.accessories;
     if (s.state !== 'Alarm' && this.machine.alarm) patch.alarm = undefined;
+    // Booting into ALARM (homing required): the position can't be trusted until homed.
+    if (s.state === 'Alarm' && this.machine.homed) patch.homed = false;
     if (this.machine.connection === 'connecting') {
       // Boards that don't reset when the port opens (no banner) come up through a status
       // report instead: ask for the build info and settings here too.
@@ -626,7 +637,9 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       if (this.machine.status === 'Alarm') throw new Error(`Can't ${what} in ALARM. Home or unlock first`);
       if (this.machine.probing) throw new Error(`Can't ${what} while probing`);
     };
-    const run = async (text: string) => {
+    /** `checked`: already checked as part of a batch (where the position is still changing). */
+    const run = async (text: string, checked = false) => {
+      if (!checked) this.checkTravel([text]);
       const r = await this.user(text, by);
       if (!r.ok) throw new Error(r.error ?? 'Command failed');
     };
@@ -639,7 +652,10 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         if ([...this.inflight, ...this.queue].some((l) => l.text === '$H') || this.machine.status === 'Home') {
           throw new Error('Already homing');
         }
-        return run('$H');
+        this.updateMachine({ homed: false });
+        await run('$H');
+        this.updateMachine({ homed: true });
+        return;
       case 'unlock':
         need();
         return run('$X');
@@ -684,10 +700,11 @@ export class GrblController extends EventEmitter<ControllerEvents> {
         return;
       case 'jog': {
         idle('jog');
+        const d = this.limitJog([cmd.x ?? 0, cmd.y ?? 0, cmd.z ?? 0], by);
         const parts = ['$J=G91G21'];
-        if (cmd.x) parts.push(`X${fmt(cmd.x)}`);
-        if (cmd.y) parts.push(`Y${fmt(cmd.y)}`);
-        if (cmd.z) parts.push(`Z${fmt(cmd.z)}`);
+        if (d[0]) parts.push(`X${fmt(d[0])}`);
+        if (d[1]) parts.push(`Y${fmt(d[1])}`);
+        if (d[2]) parts.push(`Z${fmt(d[2])}`);
         if (parts.length === 1) return;
         parts.push(`F${Math.round(cmd.feed)}`);
         return run(parts.join(''));
@@ -726,15 +743,26 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       case 'mdi': {
         idle('send commands');
         const lines = cmd.line.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        for (const l of lines) await run(l);
+        this.checkTravel(lines); // the whole batch before any of it is sent
+        try {
+          for (const l of lines) await run(l, true);
+        } finally {
+          this.internal('$G'); // keep the distance modes in step
+        }
         return;
       }
       case 'runMacro': {
         const macro = this.macros.find((m) => m.id === cmd.id);
         if (!macro) throw new Error('Macro not found');
         idle('run a macro');
+        const lines = macro.gcode.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+        this.checkTravel(lines, `Macro "${macro.name}"`);
         this.log('info', `Macro: ${macro.name}`, by);
-        for (const l of macro.gcode.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) await run(l);
+        try {
+          for (const l of lines) await run(l, true);
+        } finally {
+          this.internal('$G');
+        }
         return;
       }
       case 'override': {
@@ -831,6 +859,85 @@ export class GrblController extends EventEmitter<ControllerEvents> {
       while (Date.now() < end && !(seen > 0 && this.machine.status === 'Idle')) await new Promise((r) => setTimeout(r, 20));
     } finally {
       this.off('machine', onMachine);
+    }
+  }
+
+  /**
+   * Refuse commands that would take the machine past the end of its travel (once homed, when
+   * the position is known). Works through the lines in order, following the distance modes
+   * and where each line leaves the machine, and throws before anything is sent.
+   */
+  private checkTravel(lines: string[], what?: string): void {
+    const env = this.config?.envelope;
+    let modes = this.modes;
+    const pos = [...this.machine.mpos] as Vec3;
+    for (const line of lines) {
+      const { target, modes: next } = lineTarget(line, modes, pos, this.machine.wco);
+      if (target && env && this.machine.homed) {
+        const problem = travelProblem(target, env);
+        if (problem) {
+          const message = `${what ? `${what}: ` : ''}"${line}" would go ${problem}, into the limit switch. Not sent`;
+          this.log('error', message);
+          throw new Error(message);
+        }
+      }
+      target?.forEach((t, i) => {
+        if (t !== null) pos[i] = t;
+      });
+      modes = next;
+    }
+  }
+
+  /**
+   * Shorten a jog so it stops at the end of travel. With soft limits off GRBL would drive
+   * into the limit switch, which stops it dead (ALARM, position lost). Only once homed:
+   * before that the machine position means nothing.
+   */
+  private limitJog(d: Vec3, by?: string): Vec3 {
+    const env = this.config?.envelope;
+    if (!env || !this.machine.homed) return d;
+    const names = ['X', 'Y', 'Z'];
+    const out = [...d] as Vec3;
+    const cut: string[] = [];
+    for (let a = 0; a < 3; a++) {
+      if (!d[a]) continue;
+      const p = this.machine.mpos[a];
+      const target = Math.min(env.max[a], Math.max(env.min[a], p + d[a]));
+      const moved = Math.abs(target - p) < 0.001 ? 0 : Math.round((target - p) * 1000) / 1000;
+      if (Math.abs(moved - d[a]) > 0.001) cut.push(`${names[a]}${d[a] > 0 ? '+' : '−'}`);
+      out[a] = moved;
+    }
+    if (out.every((v) => v === 0)) throw new Error(`Already at the end of travel (${cut.join(', ')})`);
+    if (cut.length) {
+      const text = `Jog shortened to stop at the end of travel (${cut.join(', ')})`;
+      this.log('info', text, by);
+      this.emit('toast', { level: 'warn', text });
+    }
+    return out;
+  }
+
+  /**
+   * Refuse a program that would go past the end of travel from the current work zero: GRBL
+   * would drive into a limit switch (with soft limits off) and stop dead in ALARM.
+   */
+  checkFitsTravel(bounds: { min: Vec3; max: Vec3 } | null | undefined): void {
+    const env = this.config?.envelope;
+    if (!env || !bounds || !this.machine.homed) return;
+    const wco = this.machine.wco;
+    const over: string[] = [];
+    const names = ['X', 'Y', 'Z'];
+    for (let a = 0; a < 3; a++) {
+      const lo = bounds.min[a] + wco[a];
+      const hi = bounds.max[a] + wco[a];
+      if (hi > env.max[a] + 0.01) over.push(`${names[a]} by ${(hi - env.max[a]).toFixed(1)} mm past the ${a === 2 ? 'top' : 'far end'}`);
+      if (lo < env.min[a] - 0.01) over.push(`${names[a]} by ${(env.min[a] - lo).toFixed(1)} mm past the ${a === 2 ? 'bottom' : 'near end'}`);
+    }
+    if (over.length) {
+      const z = over.some((o) => o.startsWith('Z') && o.includes('top'));
+      throw new Error(
+        `From this work zero the program goes outside the machine's travel: ${over.join('; ')}.` +
+          (z ? " Its safe-Z moves would hit the top limit switch: set Z zero lower, or lower the program's safe Z." : ' Check the work zero.'),
+      );
     }
   }
 

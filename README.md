@@ -184,6 +184,16 @@ start dialog offers to run the rest of the group in order. After each file the s
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
 the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
+## Staying within the machine's travel
+
+Soft limits are off on the FoxAlien (`$20=0`), so GRBL will drive into a limit switch if asked. Hitting one stops the machine dead in ALARM, often reported as ALARM 3, and the position is then lost. Once the machine is homed, the app checks every move against the travel set in Settings:
+
+- **Jogs** stop at the end of travel. A notification says when one was shortened, and a jog that can't move is refused.
+- **Typed commands and macros** are refused, with a notification, if any line would go past the travel. This covers absolute, relative, inch and `G53` moves. The whole batch is checked before any of it is sent.
+- **Jobs** are refused at Start if, from the current work zero, the program would go outside the travel. The usual cause is a Z zero set high enough that the program's safe-Z moves would hit the top switch.
+
+Until the machine is homed, its position isn't known, so none of this applies. The Jog panel says so.
+
 ## Dealing with a problem mid-cut
 
 - **Pause** stops the motion and leaves the spindle running. The Job panel then offers **Stop spindle**. **Resume** spins it back up, waits for it, and carries on.

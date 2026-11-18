@@ -17,6 +17,8 @@ export interface MachineState {
   mpos: Vec3;
   wpos: Vec3;
   wco: Vec3;
+  /** Homed since the last alarm or connect, so the machine position (and the travel limits) can be trusted. */
+  homed?: boolean;
   feed: number;
   spindle: number;
   overrides: { feed: number; rapid: number; spindle: number };

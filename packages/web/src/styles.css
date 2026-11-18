@@ -1606,3 +1606,9 @@ label.field {
 .resume-lines .here {
   color: var(--gold);
 }
+
+.jog-note {
+  font-size: 12px;
+  color: var(--warn);
+  margin: -4px 0 10px;
+}

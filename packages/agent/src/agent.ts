@@ -426,6 +426,7 @@ export class Agent {
     // The machine could have changed state while the file downloaded.
     try {
       this.controller.checkCanStart({ loading: true });
+      this.controller.checkFitsTravel(item.bounds);
     } catch (err) {
       if (previous.status === 'toolchange') this.controller.restoreJob(previous);
       else this.controller.cancelLoading((err as Error).message);
