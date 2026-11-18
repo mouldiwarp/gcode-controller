@@ -53,7 +53,20 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
 | 6 | Metal 3D view and every dialog | ✅ |
 | 7 | Build, install and self-update: `scripts/build-app.sh`, update from git (either Mac can update the other), keep-awake while it owns the machine | ✅ |
 | 8 | Cut-over: both Macs run 2.0 (two-Mac rehearsal with the simulator, then on the FoxAlien: home, settings check, probe, surfacing, pause/resume, stop and resume from a line, self-update). 1.0's code removed (it's at tag `v1.0`). Tagged **v2.0** | ✅ |
-| 9 | Developer ID signing (permissions then survive updates), the app renamed "GCode Controller", then a notarized DMG | ⬜ waiting for the Apple Developer membership |
+| 9 | Signed releases: Developer ID signing, the app's final name, release builds on GitHub, updates from Releases (see below) | ⬜ waiting for the Apple Developer membership |
+
+### Phase 9: signed releases
+- ⬜ **Name**: agree the published name, then rename the app, its bundle id and the docs.
+- ⬜ **Developer ID signing** in `scripts/build-app.sh` (hardened runtime, timestamp), falling back to ad-hoc without the certificate.
+  The same signature on every build lets macOS keep the Documents, Local Network and USB permissions across updates.
+- ⬜ **Release workflow**: pushing a tag `vX.Y` builds the app on GitHub's macOS 26 runner, signs it (certificate
+  as an encrypted secret), notarizes and staples it (App Store Connect API key), and attaches a `.zip` and a `.dmg`
+  to a GitHub Release. Only tags pushed to this repo run it; pull requests never see the secrets.
+- ⬜ **Updates from Releases** with Sparkle 2 (signed appcast, signature checks, safe replace and restart), driven
+  by the app's own update banner. Keep: either Mac can tell the other to update; never update mid-job. The version
+  comes from the tag, and "behind" means an older version, not missing commits.
+- ⬜ Keep the build-from-git updater as a developer option, for trying changes before releasing them.
+- ⬜ Others can download the release and open it with no Gatekeeper warning; the website links to it.
 
 ## Next up
 
