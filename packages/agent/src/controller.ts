@@ -473,6 +473,11 @@ export class GrblController extends EventEmitter<ControllerEvents> {
     const part = g ? ` [${g.name}: file ${g.index + 1} of ${g.files.length}]` : '';
     const at = from > 0 ? `, resuming at line ${from + 1} of ${lines.length}` : ` (${lines.length} lines)`;
     this.log('info', `Job started: ${meta.fileName}${at}${part}${meta.by ? ` by ${meta.by}` : ''}`);
+    // An empty line first: it ends any stray characters sitting in GRBL's line buffer (electrical
+    // noise on the USB cable, say) so they can't be glued onto the job's first line.
+    void this.enqueue({ text: '', kind: 'internal', echo: false }).then((r) => {
+      if (!r.ok) this.log('info', "Cleared stray characters from GRBL's input before the job (likely electrical noise on the USB cable)");
+    });
     this.pump();
   }
 

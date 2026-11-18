@@ -145,11 +145,21 @@ describe('GrblController', () => {
     expect(ctl.job.ackedLines).toBe(resume);
     await until(() => ctl.job.status === 'done', 30000);
     const sent = sim.received.slice(before);
-    expect(sent[0]).toBe('G21G90G17G94G54');
+    expect(sent.slice(0, 2)).toEqual(['', 'G21G90G17G94G54']); // the buffer flush, then the preamble
     expect(sent).toContain('M3S12000');
     expect(sent.slice(-lines.length + resume)).toEqual(lines.slice(resume).map((l) => l.text));
     expect(ctl.job.ackedLines).toBe(ctl.job.totalLines);
   }, 60000);
+
+  it('clears stray characters in GRBL\'s input before a job, so they never spoil its first line', async () => {
+    await setup();
+    sim.write('7#'); // noise received while idle, with no newline
+    ctl.startJob(program(), { fileId: 'f1', fileName: 'pocket.nc' });
+    await until(() => ctl.job.status === 'done' || ctl.job.status === 'paused', 15000);
+    expect(ctl.job.error).toBeUndefined();
+    expect(ctl.job.status).toBe('done');
+    expect(ctl.console.some((l) => l.text.includes('Cleared stray characters'))).toBe(true);
+  });
 
   it('stops and restarts the spindle while paused', async () => {
     await setup({ speed: 2 });

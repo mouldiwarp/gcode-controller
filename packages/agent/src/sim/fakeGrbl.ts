@@ -431,6 +431,8 @@ export class FakeGrbl implements Transport {
     if (line.startsWith('$')) return this.system(line);
     if (this.state === 'Alarm') return this.send('error:9');
     if (this.state === 'Jog') return this.send('error:9');
+    // Like GRBL: every word must start with a letter (error:1, "letter not found").
+    if (!/^(?:[A-Z][-+]?(?:\d+\.?\d*|\.\d+))+$/i.test(line.replace(/\s+/g, ''))) return this.send('error:1');
     this.gcode(line);
   }
 
