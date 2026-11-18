@@ -143,14 +143,15 @@ struct Banner<Actions: View>: View {
     var body: some View {
         let c: Color = kind == .danger ? .danger : kind == .warn ? .warn : .info
         HStack(spacing: 10) {
-            Rectangle().fill(c).frame(width: 3)
             Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Color.offwhite)
             Spacer()
             actions
         }
         .frame(minHeight: 34)
-        .padding(.trailing, 12)
+        .padding(.leading, 13).padding(.trailing, 12)
+        .fixedSize(horizontal: false, vertical: true)
         .background(c.opacity(0.12))
+        .overlay(alignment: .leading) { Rectangle().fill(c).frame(width: 3) }
         .overlay(alignment: .bottom) { Rectangle().fill(Color.line).frame(height: 1) }
     }
 }

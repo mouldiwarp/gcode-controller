@@ -123,12 +123,18 @@ public final class SerialPort: Transport, @unchecked Sendable {
             let fd = lock.withLock { self.fd }
             guard fd >= 0 else { return }
             var off = 0
+            var waited = 0
             while off < bytes.count {
                 let n = bytes[off...].withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
                 if n > 0 {
                     off += n
+                    waited = 0
                 } else if n < 0 && (errno == EAGAIN || errno == EINTR) {
-                    usleep(1000) // output buffer full: the line is 115200 baud, it drains quickly
+                    // Output buffer full: at 115200 baud it drains quickly. If it doesn't drain for
+                    // 2 s the device has stopped reading; give up rather than block the port's queue.
+                    waited += 1
+                    if waited > 2000 { return }
+                    usleep(1000)
                 } else {
                     return
                 }
@@ -158,6 +164,11 @@ public final class SerialPort: Transport, @unchecked Sendable {
             return r
         }
         src?.cancel()
-        if fd >= 0 { Darwin.close(fd) }
+        if fd >= 0 {
+            // Discard unsent output first: closing a serial port otherwise waits for it to drain,
+            // which never happens if the device has stopped reading.
+            tcflush(fd, TCIOFLUSH)
+            Darwin.close(fd)
+        }
     }
 }

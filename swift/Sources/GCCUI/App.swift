@@ -55,9 +55,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             a.addButton(withTitle: "Stop and quit")
             if a.runModal() == .alertFirstButtonReturn { return .terminateCancel }
         }
+        // Shut down tidily (close the port, the link and the library), but never let a stuck step
+        // stop the app quitting: after a few seconds it quits anyway.
+        var replied = false
+        let reply = { @MainActor in
+            if !replied {
+                replied = true
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+        }
         Task { @MainActor in
             await model.shutdown()
-            sender.reply(toApplicationShouldTerminate: true)
+            reply()
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            reply()
         }
         return .terminateLater
     }
@@ -129,7 +142,7 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.obsidian)
         .foregroundStyle(Color.offwhite)
-        .overlay(alignment: .bottomTrailing) { ToastsView().padding(16) }
+        .overlay(alignment: .topTrailing) { ToastsView().padding(.top, 56).padding(.trailing, 16) }
         .sheet(isPresented: $model.managerOpen) { LibraryManager(s: s).environment(model) }
         .sheet(isPresented: $model.conflictsOpen) { ConflictsView().environment(model) }
         .sheet(item: $model.confirmStart) { req in StartDialog(req: req).environment(model) }
@@ -173,10 +186,9 @@ struct ToastsView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            ForEach(model.toasts) { t in
+            ForEach(model.toasts.reversed()) { t in
                 let c: Color = t.level == .error ? .danger : t.level == .warn ? .warn : .info
                 HStack(alignment: .top, spacing: 10) {
-                    Rectangle().fill(c).frame(width: 3)
                     Text(t.text).font(.system(size: 12.5)).foregroundStyle(Color.offwhite).fixedSize(horizontal: false, vertical: true)
                     Button {
                         model.dismiss(t.id)
@@ -185,9 +197,12 @@ struct ToastsView: View {
                     }
                     .buttonStyle(.plain).foregroundStyle(Color.steel)
                 }
-                .padding(.vertical, 8).padding(.trailing, 10)
+                .padding(.vertical, 8).padding(.leading, 13).padding(.trailing, 10)
                 .frame(maxWidth: 380, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.slate3))
+                .overlay(alignment: .leading) { Rectangle().fill(c).frame(width: 3).padding(.vertical, 1) }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.lineStrong))
                 .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
                 .transition(.move(edge: .trailing).combined(with: .opacity))

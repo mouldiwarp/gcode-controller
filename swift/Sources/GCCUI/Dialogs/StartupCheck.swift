@@ -8,7 +8,6 @@ import SwiftUI
 struct StartupCheck: View {
     @Environment(AppModel.self) private var model
     let s: AppState
-    @State private var dismissed = false
 
     var body: some View {
         let m = s.machine
@@ -17,9 +16,9 @@ struct StartupCheck: View {
             let env = s.controllerEnvelopeIfDifferent
             let writeBlocked: String? = m.status == .idle ? nil : m.status == .alarm ? "Home or unlock first" : "The machine is \(m.status.rawValue)"
             if problems.isEmpty, env == nil {
-                if !dismissed {
+                if !model.settingsOKDismissed {
                     Banner(kind: .info, text: "All \(foxAlien.settings.count) settings match the \(foxAlien.name).") {
-                        Button("OK") { dismissed = true }.gccButton(.normal, .small)
+                        Button("OK") { model.settingsOKDismissed = true }.gccButton(.normal, .small)
                     }
                 }
             } else {
@@ -64,7 +63,7 @@ struct StartupCheck: View {
                 .overlay(alignment: .leading) { Rectangle().fill(Color.warn).frame(width: 3) }
             }
         } else {
-            Color.clear.frame(height: 0).onAppear { dismissed = false }
+            Color.clear.frame(height: 0).onAppear { model.settingsOKDismissed = false }
         }
     }
 

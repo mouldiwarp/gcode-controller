@@ -48,6 +48,8 @@ public final class AppModel {
     /// Why the app couldn't start (a busy port, an unreadable library).
     public private(set) var launchError: String?
     public private(set) var toasts: [ToastItem] = []
+    /// "All settings match" was acknowledged for this connection (shown again after a reconnect).
+    public var settingsOKDismissed = false
     public private(set) var conflicts: [LibraryConflict] = []
     public private(set) var trash: [TrashItem] = []
 

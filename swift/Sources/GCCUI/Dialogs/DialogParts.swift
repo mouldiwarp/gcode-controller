@@ -83,12 +83,14 @@ struct Note<Content: View>: View {
         case .danger: .danger
         }
         HStack(alignment: .top, spacing: 10) {
-            Rectangle().fill(c).frame(width: 3)
             VStack(alignment: .leading, spacing: 4) { content }.font(.system(size: 12.5)).padding(.vertical, 8)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
+        .padding(.leading, 13)
+        .fixedSize(horizontal: false, vertical: true)
         .background(RoundedRectangle(cornerRadius: 5).fill(c.opacity(0.12)))
+        .overlay(alignment: .leading) { Rectangle().fill(c).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
