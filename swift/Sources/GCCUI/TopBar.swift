@@ -47,6 +47,12 @@ struct TopBar: View {
             Button("STOP") { model.send(.stop) }.gccButton(.danger)
                 .disabled(!s.machineReady)
                 .help("Stop the job or motion (⌘.)")
+            Button {
+                model.dialog = .settings
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .gccButton(.ghost).help("Machine settings (⇧⌘,)")
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
         .background(Color.slate)
@@ -72,6 +78,7 @@ struct Banners: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            StartupCheck(s: s)
             if s.link.via == .agent, !s.link.hubConnected {
                 Banner(kind: .info, text: "Hub offline: working on this Mac's copy of the library. Changes sync when it's back.")
             }
@@ -91,7 +98,7 @@ struct Banners: View {
             }
             if s.job.status == .toolchange {
                 Banner(kind: .warn, text: bitChangeText) {
-                    Button("Probe Z") { model.send(.probeZ) }.gccButton(.normal, .small).disabled(s.machine.status != .idle)
+                    Button("Probe Z…") { model.openProbe() }.gccButton(.normal, .small).disabled(s.machine.status != .idle)
                     if s.nextGroupFile != nil {
                         Button("Start next") { model.confirmStart = StartRequest(fileId: s.nextGroupFile!.id, next: true) }
                             .gccButton(.primary, .small).disabled(s.machine.status != .idle)

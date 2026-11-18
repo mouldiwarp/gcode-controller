@@ -1,6 +1,6 @@
 // The app: on first launch, the role picker; then the main window, laid out as 1.0 (top bar and
 // banners; DRO and jog on the left; job, library and tools on the right; 3D in the centre from
-// phase 6), with toasts, the start confirmation, the library sheets and the menus.
+// phase 6), with toasts, the dialogs, the library sheets and the menus.
 
 import AppKit
 import GCCCore
@@ -109,8 +109,11 @@ struct MainWindow: View {
                 .frame(maxHeight: .infinity)
                 .scrollIndicators(.never)
 
-                CentrePlaceholder(s: s)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 12) {
+                    Visualizer(s: s).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressPanel(s: s)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 VStack(spacing: 12) {
                     JobPanel(s: s)
@@ -129,45 +132,18 @@ struct MainWindow: View {
         .overlay(alignment: .bottomTrailing) { ToastsView().padding(16) }
         .sheet(isPresented: $model.managerOpen) { LibraryManager(s: s).environment(model) }
         .sheet(isPresented: $model.conflictsOpen) { ConflictsView().environment(model) }
-        .alert(item: $model.confirmStart) { req in startAlert(req) }
-    }
-
-    /// Phase 6 replaces this with the full start dialog (preview, travel check, work zero).
-    private func startAlert(_ req: StartRequest) -> Alert {
-        let f = s.library.first { $0.id == req.fileId }
-        let name = req.next ? (s.nextGroupFile?.name ?? f?.name ?? "the file") : (f?.name ?? "the file")
-        let w = s.machine.wpos
-        var lines = ["Work zero is set where X, Y and Z read 0. The tool is now at X \(fixed(w.x, 2)) Y \(fixed(w.y, 2)) Z \(fixed(w.z, 2))."]
-        if let f, f.estSeconds > 0 { lines.append("About \(formatDuration(f.estSeconds)), \(dims(f)) mm.") }
-        if let f, f.group != nil, !req.next { lines.append("Runs the rest of group \(f.group!) after it, pausing for each bit change.") }
-        if model.conflict(for: req.fileId) != nil { lines.append("This file has a conflict: this Mac's version will run.") }
-        if s.machine.homed != true { lines.append("The machine isn't homed, so moves aren't checked against its travel.") }
-        let start = Alert.Button.default(Text(req.next ? "Start next" : "Start")) {
-            if req.next { model.send(.startNext) } else { model.send(.start(fileId: req.fileId, group: f?.group != nil ? true : nil, fromLine: nil)) }
-        }
-        return Alert(title: Text("Start \(name)?"), message: Text(lines.joined(separator: "\n\n")), primaryButton: start, secondaryButton: .cancel())
-    }
-}
-
-/// The 3D view arrives in phase 6; meanwhile, what's loaded.
-struct CentrePlaceholder: View {
-    @Environment(AppModel.self) private var model
-    let s: AppState
-
-    var body: some View {
-        let f = s.job.fileId.flatMap { id in s.library.first { $0.id == id } } ?? model.selected
-        VStack(spacing: 10) {
-            Image(systemName: "cube.transparent").font(.system(size: 48, weight: .thin)).foregroundStyle(Color.steelDim)
-            Text(f?.name ?? "No file selected").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.offwhite)
-            if let f {
-                Text("\(dims(f)) · ~\(formatDuration(f.estSeconds))")
-                    .font(.system(size: 12)).foregroundStyle(Color.steel)
+        .sheet(item: $model.confirmStart) { req in StartDialog(req: req).environment(model) }
+        .sheet(item: $model.dialog) { d in
+            Group {
+                switch d {
+                case .probe: ProbeDialog()
+                case .resume: ResumeDialog()
+                case .surfacing: SurfacingDialog()
+                case .settings: SettingsView()
+                }
             }
-            Text("The toolpath view comes in the next update.").font(.system(size: 11.5)).foregroundStyle(Color.steelDim)
+            .environment(model)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.slate))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.line))
     }
 }
 
@@ -354,7 +330,11 @@ struct AppCommands: Commands {
             Button("Home") { model.send(.home) }.keyboardShortcut("h", modifiers: [.command, .option])
                 .disabled(!ready || s?.jobActive == true)
             Button("Unlock") { model.send(.unlock) }.disabled(!ready || s?.machine.status != .alarm)
-            Button("Probe Z") { model.send(.probeZ) }.disabled(!ready || s?.machine.status != .idle || s?.jobActive == true)
+            Button("Probe Z…") { model.openProbe() }.keyboardShortcut("p", modifiers: [.command, .option])
+                .disabled(!ready || s?.jobActive == true)
+            Button("Surfacing…") { model.dialog = .surfacing }.disabled(s == nil)
+            Divider()
+            Button("Machine Settings…") { model.dialog = .settings }.keyboardShortcut(",", modifiers: [.command, .shift]).disabled(s == nil)
             Divider()
             Button(s?.machine.status == .hold ? "Resume" : "Feed Hold") { model.send(s?.machine.status == .hold ? .resume : .hold) }
                 .keyboardShortcut("h", modifiers: [.command, .shift]).disabled(!ready)

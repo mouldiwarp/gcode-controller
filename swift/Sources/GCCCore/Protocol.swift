@@ -224,6 +224,14 @@ public struct ProbeConfig: Codable, Equatable, Sendable {
     public var latchFeed: Double
     /// Lift above the plate when done, mm.
     public var retract: Double
+
+    public init(plateThickness: Double, maxTravel: Double, seekFeed: Double, latchFeed: Double, retract: Double) {
+        self.plateThickness = plateThickness
+        self.maxTravel = maxTravel
+        self.seekFeed = seekFeed
+        self.latchFeed = latchFeed
+        self.retract = retract
+    }
 }
 
 public struct MachineConfig: Codable, Equatable, Sendable {

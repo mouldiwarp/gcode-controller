@@ -43,6 +43,8 @@ struct DroPanel: View {
                     Button("Go to XYZ0") { model.send(.goToZero(axes: [.X, .Y, .Z])) }.gccButton(.outlineGold, .small).wide()
                 }
                 .disabled(!idle)
+                Button("↧ Probe Z…") { model.openProbe() }.gccButton(.outlineGold, .small).wide()
+                    .disabled(!s.machineReady || s.jobActive).help("Set Z zero with the touch plate")
                 HStack {
                     Text("Feed \(Int(s.machine.feed))").monospaced()
                     Spacer()

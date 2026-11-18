@@ -47,7 +47,7 @@ struct JobPanel: View {
                     Text("1. The spindle is off. Fit the bit for this file.")
                     HStack {
                         Text("2. Re-probe Z.")
-                        Button("Probe Z") { model.send(.probeZ) }.gccButton(.outlineGold, .small).disabled(!idle)
+                        Button("Probe Z…") { model.openProbe() }.gccButton(.outlineGold, .small).disabled(!idle)
                     }
                     Text("3. Start the next file.")
                 }
@@ -84,9 +84,7 @@ struct JobPanel: View {
                     Text("Stopped at line \(line + 1) of \(job.totalLines) of \(job.fileName ?? "the file").").font(.system(size: 12.5))
                     Text("Deal with the problem (jog, clear chips, change the bit), then carry on from where it stopped.")
                         .font(.system(size: 12)).foregroundStyle(Color.steel)
-                    Button("Resume from line \(line + 1)") {
-                        if let id = job.fileId { model.send(.start(fileId: id, group: nil, fromLine: line)) }
-                    }
+                    Button("Resume from line \(line + 1)…") { model.dialog = .resume }
                     .gccButton(.outlineGold).disabled(!idle)
                 }
                 .padding(10).background(RoundedRectangle(cornerRadius: 6).fill(Color.obsidian))

@@ -1,0 +1,103 @@
+// Confirm before starting a job: the machine may be in another room. As 1.0's StartDialog.
+
+import GCCCore
+import GCCNet
+import SwiftUI
+
+struct StartDialog: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let req: StartRequest
+    @State private var wholeGroup = true
+    @State private var busy = false
+
+    var body: some View {
+        @Bindable var model = model
+        if let s = model.state, let item = s.library.first(where: { $0.id == req.fileId }) {
+            content(s, item)
+                .sheet(isPresented: $model.probeOver) { ProbeDialog(nested: true).environment(model) }
+        } else {
+            DialogFrame(eyebrow: "Start job", title: "File not found") {
+                Muted("The file is no longer in the library.")
+            } actions: {
+                Button("Close") { dismiss() }.gccButton().keyboardShortcut(.cancelAction)
+            }
+        }
+    }
+
+    private func content(_ s: AppState, _ item: LibraryItem) -> some View {
+        let m = s.machine
+        let remote = s.link.machineOn != nil && s.link.machineOn != model.name
+        let following = req.next ? [] : s.groupFollowing(item)
+        let b = item.cutBounds ?? item.bounds
+        let problems = s.settingProblems
+        var eyebrow = req.next && s.job.group != nil ? "Start file \(s.job.group!.index + 2) of \(s.job.group!.files.count)" : "Start job"
+        if remote { eyebrow += " on \(s.link.machineOn ?? "the machine")" }
+        var rows = [("Estimated time", formatDuration(item.estSeconds)), ("Lines", item.streamLines.formatted())]
+        if let b {
+            rows.append(("Cut extents", "X \(fixed(b.min.x, 1)) → \(fixed(b.max.x, 1)) · Y \(fixed(b.min.y, 1)) → \(fixed(b.max.y, 1)) · Z \(fixed(b.min.z, 1)) → \(fixed(b.max.z, 1))"))
+        }
+        rows += [("Work zero (machine)", xyz(m.wco)), ("Tool now at (work)", xyz(m.wpos))]
+        let overruns = b.map { travelOverruns($0, envelope: s.config.envelope, wco: m.wco) } ?? []
+        let probed = m.lastProbe?.ok == true && (s.job.finishedAt.map { m.lastProbe!.t > $0 } ?? false)
+
+        return DialogFrame(eyebrow: eyebrow, title: item.name, width: 600) {
+            if !following.isEmpty {
+                Toggle(isOn: $wholeGroup) {
+                    (Text("Then run the rest of ") + Text(item.group ?? "").bold() + Text(" in order, pausing for a bit change before each: ")
+                        + Text(following.map(\.name).joined(separator: " → ")).foregroundStyle(Color.steel))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            KV(rows: rows, mono: ["Cut extents", "Work zero (machine)", "Tool now at (work)"])
+            if !overruns.isEmpty, m.homed == true {
+                Note(kind: .warn) {
+                    Text("⚠ " + overruns.joined(separator: "; ") + ".")
+                    Text(overrunAdvice(envelope: s.config.envelope, wco: m.wco)).foregroundStyle(Color.steel)
+                }
+            }
+            if !problems.isEmpty {
+                Note(.warn, "⚠ \(problems.count == 1 ? "A controller setting differs" : "\(problems.count) controller settings differ") from \(foxAlien.name): "
+                    + problems.map { "$\($0.key) is \($0.actual ?? "?") (should be \($0.expected))" }.joined(separator: ", ") + ". Fix them in the banner at the top first.")
+            }
+            if let c = model.conflict(for: item.id) {
+                Note(.warn, "This file has a conflict (\(c.kind.summary.lowercased())): this Mac's version will run.")
+            }
+            if m.homed != true { Note(.info, "The machine isn't homed, so moves aren't checked against its travel.") }
+            VStack(alignment: .leading, spacing: 6) {
+                check("Stock clamped and the right bit fitted and tight")
+                if req.next {
+                    HStack(spacing: 8) {
+                        check("Z re-probed with the new bit")
+                        if probed { Text("(done)").foregroundStyle(Color.gold) } else {
+                            Button("Probe Z") { model.openProbe() }.gccButton(.outlineGold, .small)
+                        }
+                    }
+                } else {
+                    check("Work zero set for this file (X, Y and Z)")
+                }
+                if let r = foxAlien.spindleReminder, !m.simulated { check(r) }
+                check("Dust collection on, and nobody near the machine")
+                if remote { check("Someone can reach the machine's emergency stop") }
+            }
+        } actions: {
+            Button("Cancel") { dismiss() }.gccButton().keyboardShortcut(.cancelAction).disabled(busy)
+            Button(busy ? "Starting…" : req.next ? "▶ Start next" : "▶ Start") {
+                busy = true
+                Task {
+                    let ok = await model.run(req.next ? .startNext : .start(fileId: item.id, group: following.isEmpty ? nil : wholeGroup, fromLine: nil))
+                    busy = false
+                    if ok { dismiss() }
+                }
+            }
+            .gccButton(.primary, .large).keyboardShortcut(.defaultAction).disabled(busy)
+        }
+    }
+
+    private func check(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "square").font(.system(size: 11)).foregroundStyle(Color.gold)
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}

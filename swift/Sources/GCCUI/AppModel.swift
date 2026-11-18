@@ -10,6 +10,11 @@ import GCCNet
 import Observation
 import UserNotifications
 
+public enum Dialog: String, Identifiable, Sendable {
+    case probe, resume, surfacing, settings
+    public var id: String { rawValue }
+}
+
 public struct ToastItem: Identifiable, Equatable {
     public let id = UUID()
     public var level: Toast.Level
@@ -27,7 +32,7 @@ public struct StartRequest: Identifiable, Equatable {
 @MainActor @Observable
 public final class AppModel {
     public private(set) var setup: AppSetup?
-    public private(set) var state: AppState?
+    public internal(set) var state: AppState?
     public private(set) var instance: Instance?
     /// Why the app couldn't start (a busy port, an unreadable library).
     public private(set) var launchError: String?
@@ -41,6 +46,10 @@ public final class AppModel {
     public var managerOpen = false { didSet { if managerOpen { Task { await refreshTrash() } } } }
     public var conflictsOpen = false
     public var uploadOpen = false
+    /// The machine dialogs (one at a time; the start confirmation is `confirmStart`).
+    public var dialog: Dialog?
+    /// Probe Z opened from inside the start or surfacing dialog, shown above it.
+    public var probeOver = false
 
     // Jog settings for this Mac (the step is remembered; the feeds start from the shared config).
     public var jogStep: Double = UserDefaults.standard.double(forKey: "gcc.jogStep") {
@@ -134,13 +143,31 @@ public final class AppModel {
             if !s.config.jogSteps.contains(jogStep) { jogStep = s.config.jogSteps.dropFirst().first ?? 1 }
         }
         noticeChanges(s)
+        let first = state == nil
         state = s
+        if first { devOpen(s) }
         let c = await instance.library.conflicts()
         // New conflicts (on reconnect): ask straight away.
         if c.contains(where: { n in !conflicts.contains { $0.id == n.id } }) { conflictsOpen = true }
         conflicts = c
         if conflicts.isEmpty { conflictsOpen = false }
         if managerOpen { await refreshTrash() }
+    }
+
+    /// Dev runs only (GCC_HOME set), for smoke screenshots: GCC_SELECT=<file name> selects a file,
+    /// GCC_OPEN=probe|resume|surfacing|settings|start opens a dialog.
+    private func devOpen(_ s: AppState) {
+        guard AppSetup.devHome != nil else { return }
+        let env = ProcessInfo.processInfo.environment
+        if let name = env["GCC_SELECT"] { previewId = s.library.first { $0.name == name }?.id }
+        if let d = env["GCC_OPEN"] {
+            if d == "start", let id = previewId { confirmStart = StartRequest(fileId: id, next: false) } else { dialog = Dialog(rawValue: d) }
+        }
+    }
+
+    /// Probe Z: its own dialog, or above the start or surfacing dialog when one is open.
+    public func openProbe() {
+        if confirmStart != nil || dialog == .surfacing { probeOver = true } else { dialog = .probe }
     }
 
     public func refreshTrash() async {

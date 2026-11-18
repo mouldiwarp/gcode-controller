@@ -21,6 +21,7 @@ struct LibraryPanel: View {
             HStack(spacing: 4) {
                 Button("Add…") { model.uploadOpen = true }.gccButton(.ghost, .small).help("Add G-code files to the library")
                 Button("Manage") { model.managerOpen = true }.gccButton(.ghost, .small).help("Folders, Trash and version history")
+                Button("Surfacing…") { model.dialog = .surfacing }.gccButton(.ghost, .small).help("Make a program to flatten the stock")
                 Button {
                     model.revealLibrary()
                 } label: {
