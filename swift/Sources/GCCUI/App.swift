@@ -89,7 +89,7 @@ struct RootView: View {
             } else if let s = model.state {
                 MainWindow(s: s)
             } else {
-                ProgressView("Starting…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                Starting().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(Color.obsidian)
@@ -359,6 +359,27 @@ struct AppCommands: Commands {
                 .keyboardShortcut("h", modifiers: [.command, .shift]).disabled(!ready)
             Button("Stop") { model.send(.stop) }.keyboardShortcut(".", modifiers: .command).disabled(!ready)
             Button("Soft Reset") { model.send(.reset) }.disabled(!ready)
+        }
+    }
+}
+
+/// Shown while the library opens. A newly built copy of the app may have to be allowed into the
+/// Documents folder again, and macOS's question can be hidden behind other windows.
+struct Starting: View {
+    @State private var slow = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ProgressView("Starting…")
+            if slow {
+                Text("Waiting for the library folder in Documents. If macOS asks whether GCode Controller can access files in your Documents folder, click Allow (the question may be behind this window).")
+                    .font(.system(size: 13)).foregroundStyle(Color.steel)
+                    .multilineTextAlignment(.center).frame(maxWidth: 440)
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .seconds(5))
+            slow = true
         }
     }
 }
