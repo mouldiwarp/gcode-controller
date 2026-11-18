@@ -108,8 +108,13 @@ enum Paths {
 
 // MARK: - Server process
 
+/// When this app started: an update that reinstalls it leaves a newer binary on disk.
+let launchedAt = Date()
+
 final class Server {
     var onLog: (String) -> Void = { _ in }
+    /// After an update: return true if the app is relaunching itself (so don't restart the server here).
+    var onUpdated: () -> Bool = { false }
     var onState: (ServerState) -> Void = { _ in }
 
     private(set) var state: ServerState = .stopped {
@@ -138,6 +143,8 @@ final class Server {
         env["FORCE_COLOR"] = "0"
         // Tells the server we start it again after Update now (exit code 75).
         env["GCC_SUPERVISED"] = "1"
+        // So an update can rebuild and reinstall this app too.
+        env["GCC_APP_PATH"] = Bundle.main.bundlePath
 
         DispatchQueue.global(qos: .userInitiated).async {
             // 1. Dependencies and the web UI, the same steps as the .command launchers.
@@ -177,7 +184,9 @@ final class Server {
                         self.process = nil
                         self.stdinPipe = nil
                         if !self.stopping && proc.terminationStatus == 75 {
-                            // Updated from the UI: start the new code.
+                            // Updated from the UI. If the update reinstalled this app, relaunch it
+                            // (the new app starts the server); otherwise start the new server code.
+                            if self.onUpdated() { return }
                             self.log("↻ Updated. Restarting the \(role.package)…\n")
                             self.start(role: role, repo: repo, node: node) { _ in }
                             return
@@ -358,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         buildWindow()
         server.onLog = { [weak self] in self?.appendLog($0) }
         server.onState = { [weak self] in self?.render($0) }
+        server.onUpdated = { [weak self] in self?.relaunchIfReinstalled() ?? false }
         render(.stopped)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -365,7 +375,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if role == nil { role = askRole(firstRun: true) }
         guard role != nil else { NSApp.terminate(nil); return }
         updateRoleMenu()
-        startServer(openBrowser: true)
+        // A relaunch after an update: the browser is already open.
+        startServer(openBrowser: !CommandLine.arguments.contains("--relaunched"))
+    }
+
+    /// An update rebuilt and reinstalled this app: quit and open the new one, which starts the
+    /// server again. Returns false (carry on with this app) if the binary hasn't changed.
+    func relaunchIfReinstalled() -> Bool {
+        guard let exe = Bundle.main.executableURL,
+              let built = (try? exe.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+              built > launchedAt else { return false }
+        appendLog("↻ Updated, including this app. Opening the new version…\n")
+        // A detached shell opens it again once this copy has quit (open would just reactivate it).
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$0\" --args --relaunched", Bundle.main.bundlePath, String(getpid())]
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch {
+            appendLog("Couldn't relaunch (\(error.localizedDescription)); restarting the server with this app\n")
+            return false
+        }
+        quitting = true
+        DispatchQueue.main.async { NSApp.terminate(nil) }
+        return true
     }
 
     // Closing the window keeps the server running; click the Dock icon to bring it back.

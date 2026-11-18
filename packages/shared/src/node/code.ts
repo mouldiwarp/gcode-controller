@@ -44,6 +44,8 @@ export interface UpdateStep {
   args: string[];
   /** Shown with the step's output when it fails. */
   hint?: string;
+  /** Checked just before the step (after the earlier ones): false skips it. */
+  when?: () => boolean;
 }
 
 /** npm from the same Node install that runs this server (the Mac app's PATH may not have it). */
@@ -62,7 +64,22 @@ export function defaultSteps(repo: string): UpdateStep[] {
     },
     { label: 'Installing packages (npm install)', cmd: npm(), args: ['install', '--no-audit', '--no-fund'] },
     { label: 'Building the web UI', cmd: npm(), args: ['run', 'build:web'] },
+    ...macAppStep(repo),
   ];
+}
+
+/**
+ * When the Mac app runs this server (it passes its own path in GCC_APP_PATH), rebuild and
+ * reinstall the app too, so an update brings everything up to date. The app sees its newer
+ * binary when this server exits for the restart, and relaunches itself to run it.
+ */
+function macAppStep(repo: string): UpdateStep[] {
+  const app = process.env.GCC_APP_PATH;
+  const script = join(repo, 'scripts/build-mac-app.sh');
+  if (process.platform !== 'darwin' || !app || !existsSync(script)) return [];
+  // The script builds in mac/build and installs a copy; an app run from mac/build is rebuilt in place.
+  const dest = resolve(app, '..') === join(repo, 'mac/build') ? [] : [resolve(app, '..')];
+  return [{ label: 'Rebuilding and reinstalling the Mac app', cmd: '/bin/zsh', args: [script, ...dest] }];
 }
 
 /**
@@ -88,6 +105,7 @@ export class Updater extends EventEmitter<{ progress: [UpdateProgress]; log: [st
     if (this.running) throw new Error('An update is already running');
     try {
       for (const step of this.steps) {
+        if (step.when && !step.when()) continue;
         this.set({ running: true, step: step.label });
         this.emit('log', `${step.label}…`);
         const { code, tail } = await this.exec(step);
