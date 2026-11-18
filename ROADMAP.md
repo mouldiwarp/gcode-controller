@@ -18,7 +18,27 @@ Status key: ✅ done · 🚧 in progress · ⬜ planned · 💡 idea
 | 7c | Library manager: project folders in `~/Documents/GCode Controller`, kept in step with Finder | ✅ |
 | 7d | Version checks: an out-of-date agent is held until it's updated, with Update now | ✅ |
 | 7e | Spoilboard surfacing: zero at the left edge on the centre line, ramp-in zigzag skim | ✅ (simulator-tested) |
-| 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ⬜ waiting for the machine |
+| 8 | Real machine bring-up (FoxAlien XE-Pro Ultra) | ✅ homing, probing, spindle and surfacing on the machine |
+| 9 | **1.0** (tag `v1.0`): pause/resume, time-based progress, travel limits, start-up settings check | ✅ |
+
+## 2.0: one native Swift app
+
+1.0 stays in service until 2.0 matches it. The 2.0 app is a single app that asks on first launch
+whether this Mac is the hub or the agent. Either Mac can drive the FoxAlien over USB, and the
+library is kept fully in sync on both Macs, with conflicts resolved by asking. There's no browser.
+The code is in `swift/`.
+
+| Phase | What | Status |
+|---|---|---|
+| 1 | Core: G-code, GRBL protocol, state and commands, resume, progress, travel, surfacing, settings check (ported and checked identical to 1.0) | ✅ |
+| 2 | Machine: serial port, simulator, streaming session, `gcc` command-line streamer | ⬜ |
+| 3 | Library on disk: blobs, SQLite, Finder folder, history, Trash, 1.0 import | ⬜ |
+| 4 | Network and sync: hub API (Swarf/Fretboard unchanged), Bonjour, link between the Macs, library sync and conflicts | ⬜ |
+| 5 | App shell: role picker, main window, panels, library UI with conflicts | ⬜ |
+| 6 | Metal 3D view and every dialog | ⬜ |
+| 7 | Build, install and self-update | ⬜ |
+| 8 | Cut-over on both Macs, real-machine checks, tag v2.0 | ⬜ |
+| 9 | Later: signed, notarized DMG | 💡 |
 
 ## Next up
 

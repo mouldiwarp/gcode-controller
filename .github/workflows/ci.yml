@@ -16,3 +16,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:web
+  swift:
+    # GCode Controller 2.0, the native app (swift/), built alongside 1.0 until it takes over.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path swift
