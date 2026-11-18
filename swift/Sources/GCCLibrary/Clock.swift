@@ -55,7 +55,9 @@ struct HybridClock {
     mutating func tick(wall: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Stamp {
         last = wall > last.ms
             ? Stamp(ms: wall, counter: 0, replica: replica)
-            : Stamp(ms: last.ms, counter: last.counter + 1, replica: replica)
+            : last.counter < 9999
+                ? Stamp(ms: last.ms, counter: last.counter + 1, replica: replica)
+                : Stamp(ms: last.ms + 1, counter: 0, replica: replica) // keeps the text form fixed-width
         return last
     }
 

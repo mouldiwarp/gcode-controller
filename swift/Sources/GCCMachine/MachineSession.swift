@@ -11,10 +11,14 @@
 import Foundation
 import GCCCore
 
-public struct Toast: Equatable, Sendable {
-    public enum Level: String, Sendable { case info, warn, error }
+public struct Toast: Codable, Equatable, Sendable {
+    public enum Level: String, Codable, Sendable { case info, warn, error }
     public var level: Level
     public var text: String
+    public init(_ level: Level, _ text: String) {
+        self.level = level
+        self.text = text
+    }
 }
 
 public enum SessionEvent: Sendable {
@@ -631,7 +635,7 @@ public actor MachineSession {
         job.pausedAt = nowMs()
         job.error = message
         emit(.job(job))
-        emit(.toast(Toast(level: .error, text: "Job paused: \(message)")))
+        emit(.toast(Toast(.error, "Job paused: \(message)")))
     }
 
     private func failJob(_ message: String) {
@@ -648,7 +652,7 @@ public actor MachineSession {
         jobLines = []
         emit(.job(job))
         log(.error, "Job failed: \(message)")
-        emit(.toast(Toast(level: .error, text: "Job stopped: \(message)")))
+        emit(.toast(Toast(.error, "Job stopped: \(message)")))
     }
 
     private func finishJob(_ status: JobStatus) {
@@ -669,7 +673,7 @@ public actor MachineSession {
         emit(.job(job))
         let name = job.fileName ?? ""
         log(.info, status == .done ? "Job complete: \(name)" : "Job stopped: \(name)")
-        emit(.toast(Toast(level: .info, text: status == .done ? "Job complete: \(name)" : "Job stopped")))
+        emit(.toast(Toast(.info, status == .done ? "Job complete: \(name)" : "Job stopped")))
     }
 
     /// A file in a group finished and another follows. Turn the spindle off (the file may not
@@ -683,7 +687,7 @@ public actor MachineSession {
         emit(.job(job))
         let next = g.files[g.index + 1]
         log(.info, "File \(g.index + 1) of \(g.files.count) complete: \(job.fileName ?? ""). Next: \(next.name). Change the bit, re-probe Z, then Start next.")
-        emit(.toast(Toast(level: .info, text: "File \(g.index + 1) of \(g.files.count) done. Change the bit for \(next.name)")))
+        emit(.toast(Toast(.info, "File \(g.index + 1) of \(g.files.count) done. Change the bit for \(next.name)")))
     }
 
     private func scheduleJobEmit() {
@@ -954,7 +958,7 @@ public actor MachineSession {
         if !cut.isEmpty {
             let text = "Jog shortened to stop at the end of travel (\(cut.joined(separator: ", ")))"
             log(.info, text, by: by)
-            emit(.toast(Toast(level: .warn, text: text)))
+            emit(.toast(Toast(.warn, text)))
         }
         return out
     }

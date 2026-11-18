@@ -108,7 +108,10 @@ struct Entry {
     var changedAt: Double
     var deletedAt: Double?
     var stamps: [String: String]
+    /// Sync: a file from the other Mac waiting on a same-path conflict. Not listed or written out.
+    var parked = false
     var path: String { joinPath(folder, name) }
+    var isLive: Bool { deletedAt == nil && !parked }
 }
 
 /// What the library last wrote to (or read from) a path in the Finder folder.
@@ -138,7 +141,7 @@ public actor Library {
 
     public nonisolated let options: LibraryOptions
     public nonisolated let replica: String
-    nonisolated var root: URL { options.root }
+    public nonisolated var root: URL { options.root }
 
     let db: Database
     let blobs: BlobStore
@@ -189,15 +192,15 @@ public actor Library {
 
     /// Every file, by folder, newest first within each.
     public func items() -> [LibraryItem] {
-        sortItems(entries("deletedAt IS NULL").compactMap(item))
+        sortItems(entries("deletedAt IS NULL AND parked=0").compactMap(item))
     }
 
     public func item(_ id: String) -> LibraryItem? {
-        entry(id).flatMap { $0.deletedAt == nil ? item($0) : nil }
+        entry(id).flatMap { $0.isLive ? item($0) : nil }
     }
 
     public func content(_ id: String) -> Data? {
-        guard let e = entry(id), e.deletedAt == nil else { return nil }
+        guard let e = entry(id), e.isLive else { return nil }
         return blobs.get(e.sha)
     }
 
@@ -380,7 +383,7 @@ public actor Library {
                 try ensureFolder(moved(f))
                 try setFolderDeleted(f, true)
             }
-            for var e in entries("deletedAt IS NULL") where isInFolder(e.folder, from) {
+            for var e in entries("deletedAt IS NULL AND parked=0") where isInFolder(e.folder, from) {
                 try setPath(&e, moved(e.folder), e.name)
             }
             for row in diskRows() where isInFolder((row.path as NSString).deletingLastPathComponent, from) {
@@ -402,7 +405,7 @@ public actor Library {
         try mutate {
             if !folderExists(folder) { throw LibraryError("The folder \(folder) doesn't exist") }
             let now = nowMs()
-            for var e in entries("deletedAt IS NULL") where isInFolder(e.folder, folder) { try setDeleted(&e, now) }
+            for var e in entries("deletedAt IS NULL AND parked=0") where isInFolder(e.folder, folder) { try setDeleted(&e, now) }
             for f in folders() where isInFolder(f, folder) { try setFolderDeleted(f, true) }
         }
     }
@@ -557,11 +560,11 @@ public actor Library {
     func entry(_ id: String) -> Entry? { entries("id=?", [id]).first }
 
     func liveEntry(folder: String, name: String) -> Entry? {
-        entries("deletedAt IS NULL AND folder=? AND name=? COLLATE NOCASE", [folder, name]).first
+        entries("deletedAt IS NULL AND parked=0 AND folder=? AND name=? COLLATE NOCASE", [folder, name]).first
     }
 
     func requireLive(_ id: String) throws -> Entry {
-        guard let e = entry(id), e.deletedAt == nil else { throw LibraryError("File not found") }
+        guard let e = entry(id), e.isLive else { throw LibraryError("File not found") }
         return e
     }
 
@@ -570,19 +573,20 @@ public actor Library {
             id: r.string("id")!, folder: r.string("folder")!, name: r.string("name")!, sha: r.string("sha")!,
             source: r.string("source")!, group: r.string("grp"), groupIndex: r.int("grpIndex"), addedAt: r.double("addedAt")!,
             changedAt: r.double("changedAt")!, deletedAt: r.double("deletedAt"),
-            stamps: (try? JSONDecoder().decode([String: String].self, from: Data(r.string("stamps")!.utf8))) ?? [:])
+            stamps: (try? JSONDecoder().decode([String: String].self, from: Data(r.string("stamps")!.utf8))) ?? [:],
+            parked: r.int("parked") == 1)
     }
 
     func save(_ e: Entry) throws {
         try db.run(
             """
-            INSERT INTO entries(id, folder, name, sha, source, grp, grpIndex, addedAt, changedAt, deletedAt, stamps)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO entries(id, folder, name, sha, source, grp, grpIndex, addedAt, changedAt, deletedAt, stamps, parked)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET folder=excluded.folder, name=excluded.name, sha=excluded.sha,
               source=excluded.source, grp=excluded.grp, grpIndex=excluded.grpIndex, addedAt=excluded.addedAt,
-              changedAt=excluded.changedAt, deletedAt=excluded.deletedAt, stamps=excluded.stamps
+              changedAt=excluded.changedAt, deletedAt=excluded.deletedAt, stamps=excluded.stamps, parked=excluded.parked
             """,
-            [e.id, e.folder, e.name, e.sha, e.source, e.group, e.groupIndex, e.addedAt, e.changedAt, e.deletedAt, json(e.stamps)])
+            [e.id, e.folder, e.name, e.sha, e.source, e.group, e.groupIndex, e.addedAt, e.changedAt, e.deletedAt, json(e.stamps), e.parked])
     }
 
     /// A new entry: one change carrying every field.
@@ -644,8 +648,8 @@ public actor Library {
     func record(_ entity: String, _ id: String, _ field: String, _ value: some Encodable, base: String?) throws -> String {
         let s = clock.tick().description
         try db.run(
-            "INSERT INTO changes(stamp, entity, id, field, value, base) VALUES(?,?,?,?,?,?)",
-            [s, entity, id, field, json(value), base])
+            "INSERT INTO changes(stamp, entity, id, field, value, base, origin) VALUES(?,?,?,?,?,?,?)",
+            [s, entity, id, field, json(value), base, replica])
         try db.run("INSERT INTO meta(key, value) VALUES('clock', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [s])
         return s
     }
@@ -722,7 +726,9 @@ public actor Library {
     }
 
     func gcBlobs() {
-        guard let rows = try? db.query("SELECT sha FROM entries UNION SELECT sha FROM versions") else { return }
+        guard let rows = try? db.query(
+            "SELECT sha FROM entries UNION SELECT sha FROM versions UNION SELECT sha FROM conflicts WHERE sha IS NOT NULL")
+        else { return }
         var keep = Set(rows.compactMap { $0.string("sha") })
         keep.formUnion(pinned.keys)
         for sha in blobs.all() where !keep.contains(sha) { blobs.remove(sha) }
@@ -770,7 +776,27 @@ func json(_ value: some Encodable) -> String {
 }
 
 func migrate(_ db: Database) throws {
-    if db.userVersion >= 1 { return }
+    if db.userVersion < 1 { try migrate1(db) }
+    if db.userVersion < 2 {
+        // Sync (phase 4): who made each change (indexed, for "what haven't you seen"), parked
+        // same-path arrivals, and what a conflict's other side is.
+        try db.transaction {
+            try db.exec(
+                """
+                ALTER TABLE changes ADD COLUMN origin TEXT;
+                UPDATE changes SET origin=substr(stamp, 23);
+                CREATE UNIQUE INDEX changes_stamp ON changes(stamp);
+                CREATE INDEX changes_origin ON changes(origin, stamp);
+                ALTER TABLE entries ADD COLUMN parked INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE conflicts ADD COLUMN otherId TEXT;
+                ALTER TABLE conflicts ADD COLUMN sha TEXT;
+                PRAGMA user_version = 2;
+                """)
+        }
+    }
+}
+
+private func migrate1(_ db: Database) throws {
     try db.transaction {
         try db.exec(
             """

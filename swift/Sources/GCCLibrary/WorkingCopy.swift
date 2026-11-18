@@ -100,7 +100,7 @@ extension Library {
             try blobs.put(data, sha: sha)
 
             // Edited in place.
-            if let row, var e = entry(row.entryId), e.deletedAt == nil {
+            if let row, var e = entry(row.entryId), e.isLive {
                 try replaceContent(&e, sha: sha, source: e.source, now: nowMs())
                 try setDiskRow(f.path, entry: e.id, sha: sha)
                 changed = true
@@ -117,7 +117,7 @@ extension Library {
                 continue
             }
             // Moved or renamed: the same content disappeared from somewhere else.
-            if let (oldPath, old) = missing.first(where: { $0.value.sha == sha }), var e = entry(old.entryId), e.deletedAt == nil {
+            if let (oldPath, old) = missing.first(where: { $0.value.sha == sha }), var e = entry(old.entryId), e.isLive {
                 missing[oldPath] = nil
                 try db.run("DELETE FROM disk WHERE path=?", [oldPath])
                 try ensureFolder(f.folder)
@@ -139,7 +139,7 @@ extension Library {
 
         for (path, row) in missing {
             try db.run("DELETE FROM disk WHERE path=?", [path])
-            if var e = entry(row.entryId), e.deletedAt == nil, e.path == path {
+            if var e = entry(row.entryId), e.isLive, e.path == path {
                 try setDeleted(&e, nowMs())
                 changed = true
             }
@@ -164,7 +164,7 @@ extension Library {
     func materialize() throws -> Bool {
         let fm = FileManager.default
         var changed = false
-        let live = Dictionary(entries("deletedAt IS NULL").map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let live = Dictionary(entries("deletedAt IS NULL AND parked=0").map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var rowFor: [String: DiskRow] = [:]
 
         for row in diskRows() {

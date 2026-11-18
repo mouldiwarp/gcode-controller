@@ -10,7 +10,7 @@ func fileExtension(_ name: String) -> String {
     return name[dot...].lowercased()
 }
 
-func isGcodeName(_ name: String) -> Bool { gcodeExtensions.contains(fileExtension(name)) }
+public func isGcodeName(_ name: String) -> Bool { gcodeExtensions.contains(fileExtension(name)) }
 
 private func dropControls(_ s: some StringProtocol, also: Set<Character>) -> String {
     String(s.filter { c in !also.contains(c) && !c.unicodeScalars.allSatisfy { $0.value < 0x20 } })
@@ -69,7 +69,7 @@ func isInFolder(_ itemFolder: String, _ folder: String) -> Bool {
 }
 
 /// "part.nc" → "part (2).nc", "part (3).nc"… until `taken` says no.
-func uniqueName(_ name: String, taken: (String) -> Bool) -> String {
+public func uniqueName(_ name: String, taken: (String) -> Bool) -> String {
     if !taken(name) { return name }
     let ext = fileExtension(name)
     let stem = ext.isEmpty ? name : String(name.dropLast(ext.count))
