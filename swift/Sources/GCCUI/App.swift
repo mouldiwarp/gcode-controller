@@ -68,9 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await model.shutdown()
             reply()
         }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
-            reply()
+        // Off the main actor, so it fires even if the main actor is stuck; AppKit's wait for the
+        // reply runs the run loop in its modal mode, so run it there.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            RunLoop.main.perform(inModes: [.common, .modalPanel]) { MainActor.assumeIsolated { reply() } }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
         }
         return .terminateLater
     }

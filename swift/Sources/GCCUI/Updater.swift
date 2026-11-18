@@ -171,5 +171,8 @@ public func relaunch(_ app: URL) throws {
     p.standardOutput = FileHandle.nullDevice
     p.standardError = FileHandle.nullDevice
     try p.run()
-    NSApp.terminate(nil)
+    // Not straight from here: this is called from a main-actor task, and terminate's wait for
+    // applicationShouldTerminate's tidy shutdown would block the main actor that shutdown needs.
+    // From the run loop instead, the main actor stays free while it waits.
+    RunLoop.main.perform(inModes: [.default]) { NSApp.terminate(nil) }
 }
