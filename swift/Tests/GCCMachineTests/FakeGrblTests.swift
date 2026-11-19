@@ -103,13 +103,16 @@ final class Lines: @unchecked Sendable {
     }
 
     @Test func homesWithDollarHAndRepliesOkWhenDone() async throws {
-        let sim = FakeGrbl(.init(speed: 2, bootDelayMs: 0)) // homing lasts 1 s, so a busy CI runner still sees it
+        // Homing takes 2 simulated seconds: at speed 2, 100 ticks, so never less than about 1 s of real time.
+        let sim = FakeGrbl(.init(speed: 2, bootDelayMs: 0))
         let out = Lines(sim)
         try await sim.open()
         try await until { sim.state == .alarm }
+        let start = ContinuousClock.now
         sim.write("$H\n")
-        try await until { sim.state == .home }
+        // Not by watching for the Home state: a busy CI runner can starve this poll past the end of homing.
         try await until { out.contains("ok") }
+        #expect(ContinuousClock.now - start >= .milliseconds(900), "ok only once homing has finished")
         #expect(sim.state == .idle)
         #expect(sim.mpos == .zero)
         await sim.close()
