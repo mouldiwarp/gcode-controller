@@ -103,7 +103,7 @@ final class Lines: @unchecked Sendable {
     }
 
     @Test func homesWithDollarHAndRepliesOkWhenDone() async throws {
-        let sim = FakeGrbl(.init(speed: 20, bootDelayMs: 0))
+        let sim = FakeGrbl(.init(speed: 2, bootDelayMs: 0)) // homing lasts 1 s, so a busy CI runner still sees it
         let out = Lines(sim)
         try await sim.open()
         try await until { sim.state == .alarm }
