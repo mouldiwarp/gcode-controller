@@ -20,5 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test --package-path swift
-        env:
-          SWIFT_BACKTRACE: enable=yes,interactive=no # a crash in the tests prints its stack
+      # If the test process crashes, keep macOS's crash report (it has the stack) with the run.
+      - name: Collect crash reports
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/crashes"
+          find ~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports -name '*PackageTests*' \
+            -exec cp {} "$RUNNER_TEMP/crashes/" \; 2>/dev/null || true
+          ls "$RUNNER_TEMP/crashes"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: crash-reports
+          path: ${{ runner.temp }}/crashes
+          if-no-files-found: ignore
