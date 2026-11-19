@@ -76,6 +76,11 @@ struct Banners: View {
     @Environment(AppModel.self) private var model
     let s: AppState
 
+    private var simulatorButton: some View {
+        Button("Use the simulator") { model.useSimulator(true) }.gccButton(.primary, .small)
+            .help("Run the built-in GRBL simulator until you switch back or restart; the saved setup isn't changed")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             StartupCheck(s: s)
@@ -83,8 +88,18 @@ struct Banners: View {
             if s.link.via == .agent, !s.link.hubConnected {
                 Banner(kind: .info, text: "Hub offline: working on this Mac's copy of the library. Changes sync when it's back.")
             }
-            if s.link.via == .hub, !s.link.agentConnected, s.link.machineOn == nil, model.setup?.machine == MachineKind.none {
-                Banner(kind: .info, text: "The garage Mac isn't connected. Open KerfLine there to use the machine.")
+            if model.simulating {
+                Banner(kind: .info, text: "Simulator: nothing here moves a real machine\(model.setup?.machine == .usb ? ", and the machine on USB is left alone" : "").") {
+                    Button("Back to the machine") { model.useSimulator(false) }.gccButton(.normal, .small).disabled(s.jobActive)
+                }
+            } else if s.link.via == .hub, !s.link.agentConnected, s.link.machineOn == nil, model.setup?.machine == MachineKind.none {
+                Banner(kind: .info, text: "The garage Mac isn't connected. Open KerfLine there to use the machine, or try things out on the simulator.") {
+                    simulatorButton
+                }
+            } else if model.setup?.machine == .usb, s.link.machineOn == nil, model.settledAfterLaunch {
+                Banner(kind: .info, text: "No machine found on USB. Plug the FoxAlien in (it connects by itself), or try things out on the simulator.") {
+                    simulatorButton
+                }
             }
             if let a = s.machine.alarm {
                 Banner(kind: .danger, text: "ALARM \(a.code): \(a.message)") {

@@ -424,6 +424,8 @@ enum DevShow {
         case "conflicts": model.conflictsOpen = true
         case "add": model.uploadOpen = true
         case "check-updates": Task { await model.checkForUpdates(manual: true) }
+        case "simulator": model.useSimulator(true)
+        case "machine": model.useSimulator(false)
         case "update":
             do { try model.beginUpdate() } catch { model.toast(.error, error.localizedDescription) }
         default:

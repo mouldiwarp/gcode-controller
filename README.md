@@ -71,6 +71,9 @@ separate app to macOS. Its first launch brings over the settings of a GCode Cont
 
 - **First launch** asks whether this Mac is the **Hub** or an **Agent**, its name, and whether the machine is on
   USB here, simulated, or not on this Mac. Change it later in **Settings** (⌘,).
+- **No machine?** If none is found on USB (or, on the design Mac, the garage Mac isn't connected), a banner offers
+  **Use the simulator**: the built-in GRBL simulator runs in its place, marked **SIM**, until **Back to the
+  machine** or the next launch. It never moves the real machine, and the saved setup isn't changed.
 - **macOS asks** to let it find devices on the local network (click **Allow**, or the Macs can't link) and to
   access the Documents folder (click **Allow**, or the library can't open). Plugging the machine into an
   Apple-silicon laptop also asks once whether to allow the accessory.

@@ -47,6 +47,13 @@ public final class AppModel {
     public private(set) var instance: Instance?
     /// Why the app couldn't start (a busy port, an unreadable library).
     public private(set) var launchError: String?
+    /// Running the built-in simulator for now, in place of the machine the setup names (until
+    /// "Back to the machine" or the next launch; the saved setup isn't changed).
+    public private(set) var simulating = false
+    /// A few seconds after launch: long enough for a plugged-in machine to connect, or the other
+    /// Mac to say it has it, so "no machine" isn't offered while it's still being found.
+    public private(set) var settledAfterLaunch = false
+    private var settleTask: Task<Void, Never>?
     public private(set) var toasts: [ToastItem] = []
     /// "All settings match" was acknowledged for this connection (shown again after a reconnect).
     public var settingsOKDismissed = false
@@ -98,12 +105,20 @@ public final class AppModel {
 
     // MARK: Lifecycle
 
-    /// Start as `setup` says (first launch: after the role picker).
-    public func launch(_ setup: AppSetup) async {
+    /// Start as `setup` says (first launch: after the role picker), or with the simulator in place
+    /// of its machine.
+    public func launch(_ setup: AppSetup, simulate: Bool = false) async {
         await shutdown()
         setup.save()
         self.setup = setup
+        simulating = simulate
         launchError = nil
+        settledAfterLaunch = false
+        settleTask?.cancel()
+        settleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { self?.settledAfterLaunch = true }
+        }
         do {
             try FileManager.default.createDirectory(at: setup.dataDir, withIntermediateDirectories: true)
             if setup.role == .hub { try FileManager.default.createDirectory(at: setup.inbox, withIntermediateDirectories: true) }
@@ -111,15 +126,23 @@ public final class AppModel {
             await library.watch()
             var options = setup.instanceOptions
             options.code = build.code
+            if simulate { options.machine = .simulator(FakeGrblOptions()) }
             try await attach(Instance(options, library: library))
             startUpdateChecks()
             // Take the machine if it's plugged in here (and keep trying until it is).
-            if setup.machine != .none, await instance?.owner() == Instance.Owner.none {
+            if setup.machine != .none || simulate, await instance?.owner() == Instance.Owner.none {
                 try? await instance?.execute(.connect(port: nil), by: setup.name)
             }
         } catch {
             launchError = error.localizedDescription
         }
+    }
+
+    /// Switch between the simulator and the machine the setup names, by restarting the instance
+    /// (never while a job runs here).
+    public func useSimulator(_ on: Bool) {
+        guard let setup, !jobRunningHere else { return }
+        Task { await launch(setup, simulate: on) }
     }
 
     /// Run an instance (tests pass their own).

@@ -33,7 +33,8 @@ Tests use **swift-testing** (`import Testing`, `@Suite`, `@Test`, `#expect`), no
 `GCC_HOME=<folder> swift run GCodeController` puts the saved setup, library, data and inbox under that folder, on port
 8090 and Bonjour `_gcodehub-dev._tcp`, so it doesn't touch the real install (`GCCUI/Setup.swift`). Only in that mode:
 `GCC_SELECT=<file name>` / `GCC_OPEN=probe|resume|surfacing|settings|start` open a dialog at launch, and a distributed
-notification `gcc.dev.show` opens dialogs/sheets from a script (see `DevShow` in `GCCUI/App.swift`).
+notification `gcc.dev.show` opens dialogs/sheets from a script, or switches to the simulator and back (`simulator`,
+`machine`) (see `DevShow` in `GCCUI/App.swift`).
 
 ## Architecture
 
