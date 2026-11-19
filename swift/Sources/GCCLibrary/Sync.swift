@@ -231,7 +231,7 @@ extension Library {
         switch c.field {
         case "content":
             guard let sha = decode(c.value, as: String.self) else { return }
-            if e.deletedAt != nil, unseenHere(e.stamps["deleted"], peer) {
+            if e.deletedAt != nil, unseenHere(e.stamps["deleted"], by: c, peer) {
                 try addConflict(.deleteEdit, entry: e.id, field: "content", theirs: c.value, sha: sha, c, peer)
             }
             if !concurrent {
@@ -256,7 +256,7 @@ extension Library {
             }
         case "deleted":
             let at = decode(c.value, as: Double.self) // "null": restored
-            if at != nil, e.deletedAt == nil, unseenHere(e.stamps["content"], peer) {
+            if at != nil, e.deletedAt == nil, unseenHere(e.stamps["content"], by: c, peer) {
                 try addConflict(.editDelete, entry: e.id, field: "deleted", theirs: c.value, sha: nil, c, peer)
                 return
             }
@@ -283,8 +283,12 @@ extension Library {
     }
 
     /// A change made here that the other Mac hadn't seen when it sent its own.
-    private func unseenHere(_ stamp: String?, _ peer: SyncPeer) -> Bool {
+    /// Whether this Mac's change `stamp` was unknown to the other Mac when it made `c`.
+    private func unseenHere(_ stamp: String?, by c: SyncChange, _ peer: SyncPeer) -> Bool {
         guard let st = stamp.flatMap(Stamp.init), st.replica == replica else { return false }
+        // A Mac's clock passes every stamp it receives, so a change stamped earlier than ours was
+        // made before it saw ours, even if it has acknowledged ours since (its ack can arrive first).
+        if c.stamp < st { return true }
         return peer.seenMine.map { st > $0 } ?? true
     }
 

@@ -255,6 +255,30 @@ private func text(_ s: String) -> Data { Data("G21 G90\n\(s)\nM30".utf8) }
         #expect(p.boxA.read("same.nc") == gcode() && p.boxB.read("same.nc") == gcode())
     }
 
+    /// The reconnect race behind an intermittent failure: the delete reaches the editing Mac first,
+    /// which acknowledges it before sending its edit. The edit is still older than the delete.
+    @Test func anEditThatArrivesAfterTheAckOfADeleteStillConflicts() async throws {
+        let p = Pair()
+        try await p.open()
+        await p.connect()
+        let part = try await p.a.add(text("G1 X1"), AddOptions(name: "part.nc"))
+        #expect(await p.settled())
+        await p.disconnect()
+        p.boxA.finderWrite("part.nc", text("G1 X22"))
+        _ = await p.a.rescan()
+        try await Task.sleep(for: .milliseconds(5)) // the delete is stamped after the edit
+        try await p.b.delete(part.id)
+
+        let edit = await p.a.syncChanges(after: await p.b.versionVector())
+        let delete = await p.b.syncChanges(after: await p.a.versionVector())
+        #expect(edit.map(\.field) == ["content"] && delete.map(\.field) == ["deleted"])
+        try await p.a.applySync(delete, peer: SyncPeer(name: "Garage", seenMine: nil))
+        // A has now acknowledged the delete, and only then does its edit reach B.
+        try await p.b.applySync(edit, peer: SyncPeer(name: "Design", seenMine: delete[0].stamp))
+        #expect(await p.a.conflicts().map(\.kind) == [.editDelete])
+        #expect(await p.b.conflicts().map(\.kind) == [.deleteEdit])
+    }
+
     @Test func editedHereDeletedThere() async throws {
         let p = Pair()
         try await p.open()
