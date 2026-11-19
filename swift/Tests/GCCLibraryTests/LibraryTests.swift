@@ -47,7 +47,8 @@ final class Sandbox {
     func remove(_ rel: String) { try! FileManager.default.removeItem(at: path(rel)) }
 }
 
-func until(_ ms: Int = 5000, _ cond: () async -> Bool) async -> Bool {
+// Generous: it returns as soon as the condition holds, and a busy CI runner can take seconds to deliver FSEvents.
+func until(_ ms: Int = 20000, _ cond: () async -> Bool) async -> Bool {
     let end = Date().addingTimeInterval(Double(ms) / 1000)
     while Date() < end {
         if await cond() { return true }
