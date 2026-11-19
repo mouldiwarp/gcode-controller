@@ -110,6 +110,9 @@ public final class FakeGrbl: Transport, @unchecked Sendable {
     private var probing = false
     private var pendingOkAfterHome = false
     private var dropOks = 0
+    /// Opened but not booted yet: like GRBL resetting as the port opens, nothing is read until the
+    /// banner. (Reading first let a late boot reset the state under a move that had already started.)
+    private var booting = false
     private var settings: [Int: Double]
 
     public init(_ opts: FakeGrblOptions = .init()) {
@@ -151,6 +154,7 @@ public final class FakeGrbl: Transport, @unchecked Sendable {
     public func open() async throws {
         locked {
             isOpen = true
+            booting = opts.bannerOnOpen
             let t = DispatchSource.makeTimerSource(queue: queue)
             t.schedule(deadline: .now(), repeating: .milliseconds(opts.tickMs))
             t.setEventHandler { [weak self] in self?.tick() }
@@ -226,6 +230,7 @@ public final class FakeGrbl: Transport, @unchecked Sendable {
 
     private func boot() {
         guard isOpen else { return }
+        booting = false
         send("")
         send("Grbl 1.1h ['$' for help]")
         if opts.homingRequired {
@@ -353,7 +358,7 @@ public final class FakeGrbl: Transport, @unchecked Sendable {
 
     private func tick() {
         locked {
-            guard isOpen else { return }
+            guard isOpen, !booting else { return }
             processRx()
             move(Double(opts.tickMs) / 1000 * opts.speed)
         }
