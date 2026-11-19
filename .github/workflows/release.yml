@@ -49,6 +49,8 @@ jobs:
 
       - name: Test
         run: swift test --package-path swift
+        env:
+          SWIFT_BACKTRACE: enable=yes,interactive=no # a crash in the tests prints its stack
 
       - name: Import the Developer ID certificate
         if: env.MACOS_CERT_P12 != ''

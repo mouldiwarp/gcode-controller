@@ -20,3 +20,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test --package-path swift
+        env:
+          SWIFT_BACKTRACE: enable=yes,interactive=no # a crash in the tests prints its stack
