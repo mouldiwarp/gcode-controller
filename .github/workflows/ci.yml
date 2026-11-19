@@ -1,11 +1,22 @@
+# Runs the tests on every push to main and every pull request. A run that never got a macOS runner
+# (GitHub's free macOS capacity runs short) is re-run by retry.yml; a failing test is not.
 name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+
+# A newer push to the same branch supersedes an older run, so the queue for macOS runners stays short.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   swift:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: swift test --package-path swift

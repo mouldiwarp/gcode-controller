@@ -1,0 +1,35 @@
+# Re-runs a CI or Release run whose job never started because no macOS runner was free ("The job
+# was not acquired by Runner..."). Only that case: a run whose job started and failed (a test, the
+# build) is left failed, so a flaky test still shows up. Runs on Linux, which is plentiful and free.
+name: Retry when no runner
+on:
+  workflow_run:
+    workflows: [CI, Release]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.run_attempt < 4
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN: ${{ github.event.workflow_run.id }}
+      ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+    steps:
+      - name: Re-run if a job never got a runner
+        run: |
+          # A job that never got a runner has no runner name and no steps.
+          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/attempts/$ATTEMPT/jobs" \
+            --jq '[.jobs[] | select(.conclusion != "success")]')
+          started=$(jq '[.[] | select((.runner_name // "") != "" or (.steps | length) > 0)] | length' <<< "$jobs")
+          unstarted=$(jq '[.[] | select((.runner_name // "") == "" and (.steps | length) == 0)] | length' <<< "$jobs")
+          echo "attempt $ATTEMPT: $unstarted job(s) never started, $started started and failed"
+          if [[ "$unstarted" -gt 0 && "$started" -eq 0 ]]; then
+            sleep 120 # give the runner pool a moment
+            gh run rerun "$RUN" --repo "$GITHUB_REPOSITORY"
+            echo "::notice::Re-ran run $RUN (no runner was free)"
+          fi

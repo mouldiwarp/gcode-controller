@@ -5,6 +5,44 @@ A release is a universal **KerfLine.app**, signed with a Developer ID and notari
 installed copy), plus **appcast.xml** (what Sparkle checks). GitHub Actions builds all of them for free
 (the repository is public) on its macOS 26 runner.
 
+## Before tagging a release
+
+A tag publishes to everyone who downloads or updates, so check the commit you'll tag on your own Macs
+and on the machine first. GitHub's tests are a second check, not the gate.
+
+1. **Tests on the design Mac:** `scripts/ci.sh` on the commit you'll tag (it tests `HEAD` in a clean
+   worktree, so commit first). It must pass.
+2. **Install it on both Macs:** `scripts/build-app.sh` on the design Mac. Update the garage Mac
+   from its update banner, or run `build-app.sh` there too.
+3. **On the machine.** Do an air run with the bit raised well clear of the stock, and keep a hand near the stop.
+   - [ ] Connect over USB. The start-up `$$` check passes, or flags only what you expect.
+   - [ ] Home (`$H`), then jog each axis both ways. A jog towards the end of travel stops short of it.
+   - [ ] Probe Z on the touch plate. Then a probe that misses gives ALARM 5.
+   - [ ] Air-cut `samples/test-square.nc`. Progress and time left move sensibly.
+   - [ ] During the run: Pause, Stop spindle, then Resume. The spindle spins back up before it carries on.
+   - [ ] Stop mid-move. The job remembers the line the cutter was on. If GRBL alarmed, home again.
+   - [ ] Resume from a line after a stop. The preamble goes to safe Z first.
+   - [ ] Start refuses a job that would go past the travel, for example with Z zero set too high.
+   - [ ] Spindle on and off from the UI (`M3 S…` / `M5`), if anything touching it changed.
+4. **Two Macs.** Whichever Mac doesn't own the machine:
+   - [ ] mirrors the machine state and console, and its Pause works;
+   - [ ] receives a file added on the other Mac (library sync);
+   - [ ] has a file group copied over before the first file starts.
+5. **Anything new in this release:** try it on the machine, and update `README.md` if behaviour changed.
+6. **Updates** (from the second release on): after the release is out, one installed copy of the
+   previous release shows the update and installs it, keeping its settings and library.
+
+Then tag it (below). The release workflow runs the tests once more before building.
+
+## When GitHub CI fails
+
+- **"The job was not acquired by Runner"**: no free macOS runner (the free pool runs short).
+  `.github/workflows/retry.yml` re-runs CI and Release runs like that by itself, up to three times. If
+  it still fails, re-run it from the Actions page later.
+- **A test failed**: treat it as real. A test that only fails on a slow runner usually waits for a
+  state that lasts a moment, or gives the system too little time. Reproduce it with the CPU busy:
+  `for i in $(seq 12); do (yes > /dev/null &); done; swift test --package-path swift; pkill yes`.
+
 ## Making a release
 
 ```sh
