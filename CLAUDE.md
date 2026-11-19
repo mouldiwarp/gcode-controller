@@ -19,7 +19,7 @@ swift test --filter "GCCLibraryTests.SyncTests"       # one suite (swift-testing
 swift run GCodeController        # run the app without installing
 swift run gcc ports              # list serial ports (* = looks like GRBL)
 swift run gcc stream --simulate ../samples/test-square.nc   # stream to the built-in GRBL simulator
-scripts/build-app.sh             # build from git: "GCode Controller 2.0", installed to ~/Applications
+scripts/build-app.sh             # build from git: "GCode Controller 2.0.app" (shown as KerfLine), installed to ~/Applications
 scripts/release.sh 2.1           # a KerfLine release in dist/ (universal app, dmg, zip, appcast); CI runs it on a v* tag
 ```
 
@@ -73,9 +73,10 @@ Key behaviours that span modules:
 ## Naming in transition
 
 The product name is **KerfLine** (repo `mouldiwarp/kerfline`, UI text), but the Swift package, modules (`GCC*`),
-installed app name ("GCode Controller 2.0"), bundle id, library folder, `gcc.*` defaults keys and Bonjour types keep the
+installed app's file name ("GCode Controller 2.0.app"), bundle id, library folder, `gcc.*` defaults keys and Bonjour types keep the
 old GCode Controller names on purpose: they change together with Developer ID signing (ROADMAP phase 9) so macOS
-permissions reset only once. Don't rename them piecemeal. Release builds already use "KerfLine" and
+permissions reset only once. Don't rename them piecemeal. Only the name macOS shows is already KerfLine (a localized
+display name in `build-app.sh`, which needs `CFBundleDisplayName` to stay the file name). Release builds already use "KerfLine" and
 `io.github.mouldiwarp.kerfline`, and copy the old bundle id's `gcc.*` defaults on first launch (`Setup.swift`).
 
 ## Docs

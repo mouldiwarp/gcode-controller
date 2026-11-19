@@ -62,10 +62,10 @@ cd kerfline
 scripts/build-app.sh
 ```
 
-That compiles the app for that Mac (about a minute; a few on an older Mac) and installs **GCode Controller 2.0** in
-`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login. (A build from source
-keeps the GCode Controller name and bundle id for now; the KerfLine download is a separate app to macOS. Its first
-launch brings over the settings of a GCode Controller 2.0 on the same Mac.)
+That compiles the app for that Mac (about a minute; a few on an older Mac) and installs it in `~/Applications`. It
+shows as **KerfLine**; open it from Spotlight: ⌘Space, then type "KerfLine". Nothing starts at login. (A build from
+source is still the file `GCode Controller 2.0.app` with the old bundle id for now, so the KerfLine download is a
+separate app to macOS. Its first launch brings over the settings of a GCode Controller 2.0 on the same Mac.)
 
 ### Either way
 

@@ -24,12 +24,16 @@ DEST="${1:-$HOME/Applications}"
 
 if [[ "$RELEASE" == 1 ]]; then
   NAME="KerfLine"
+  SHOWN="$NAME"
   BUNDLE_ID="io.github.mouldiwarp.kerfline"
   ARCHS=(--arch arm64 --arch x86_64)
 else
   # Builds from git keep the old name and bundle id until the Macs move to signed releases, so
   # macOS's permissions only reset once.
   NAME="${GCC_APP_NAME:-GCode Controller 2.0}"
+  # What the menu bar, Dock, app switcher and Finder show. Only the file name and bundle id have to
+  # stay, and they do.
+  SHOWN="${GCC_SHOWN_NAME:-KerfLine}"
   BUNDLE_ID="${GCC_BUNDLE_ID:-io.github.mouldiwarp.gcodecontroller2}"
   ARCHS=()
 fi
@@ -58,6 +62,13 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN/GCodeController" "$APP/Contents/MacOS/GCodeController"
 cp swift/App/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+if [[ "$SHOWN" != "$NAME" ]]; then
+  # Dock and Finder show the file name unless the bundle has a localized display name, which they
+  # use only while the file name still matches CFBundleDisplayName (so that stays the file name).
+  mkdir -p "$APP/Contents/Resources/en.lproj"
+  printf '"CFBundleName" = "%s";\n"CFBundleDisplayName" = "%s";\n' "$SHOWN" "$SHOWN" \
+    > "$APP/Contents/Resources/en.lproj/InfoPlist.strings"
+fi
 
 # Sparkle (linked by every build). The app isn't sandboxed, so its XPC services aren't needed.
 SPARKLE="$BIN/Sparkle.framework"
@@ -84,8 +95,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>$NAME</string>
+  <key>CFBundleName</key><string>$SHOWN</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
+  <key>LSHasLocalizedDisplayName</key><$([[ "$SHOWN" != "$NAME" ]] && echo true || echo false)/>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key><string>GCodeController</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -97,7 +110,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHumanReadableCopyright</key><string>MIT License. Not affiliated with or endorsed by FoxAlien.</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>NSLocalNetworkUsageDescription</key><string>$NAME links the design Mac and the machine Mac, and receives files from Swarf and Fretboard.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>$SHOWN links the design Mac and the machine Mac, and receives files from Swarf and Fretboard.</string>
   <key>NSBonjourServices</key><array><string>_gcodehub._tcp</string><string>_gcodehub-try._tcp</string></array>
   <key>GCCCommit</key><string>$COMMIT</string>
   <key>GCCCommitTime</key><string>$COMMIT_TIME</string>
@@ -132,5 +145,5 @@ if [[ "$RELEASE" == 1 ]]; then
   echo "Built $DEST/$NAME.app ($VERSION, ${COMMIT:0:7})"
 else
   mdimport "$DEST/$NAME.app" 2>/dev/null || true
-  echo "Installed $DEST/$NAME.app (${COMMIT:0:7}). Open it from Spotlight: ⌘Space, then type \"GCode\"."
+  echo "Installed $DEST/$NAME.app (${COMMIT:0:7}). Open it from Spotlight: ⌘Space, then type \"KerfLine\"."
 fi

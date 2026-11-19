@@ -381,7 +381,7 @@ struct Starting: View {
         VStack(spacing: 14) {
             ProgressView("Starting…")
             if slow {
-                Text("Waiting for the library folder in Documents. If macOS asks whether KerfLine (GCode Controller 2.0) can access files in your Documents folder, click Allow (the question may be behind this window).")
+                Text("Waiting for the library folder in Documents. If macOS asks whether KerfLine can access files in your Documents folder, click Allow (the question may be behind this window).")
                     .font(.system(size: 13)).foregroundStyle(Color.steel)
                     .multilineTextAlignment(.center).frame(maxWidth: 440)
             }

@@ -14,7 +14,7 @@ cd kerfline
 scripts/build-app.sh
 ```
 
-This installs KerfLine as **GCode Controller 2.0** in `~/Applications` (it takes the KerfLine name with the signed releases). Open it from Spotlight (⌘Space, "GCode").
+This installs KerfLine in `~/Applications` as the file `GCode Controller 2.0.app`; the menu bar, Dock and Finder show it as KerfLine. Open it from Spotlight (⌘Space, "KerfLine").
 Keep the checkout: the app updates itself from it.
 
 ## 2. Design Mac: the hub
