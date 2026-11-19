@@ -59,17 +59,20 @@ behind. Neither updates while a job runs on it. While a Mac has the machine on U
 - ✅ **Name** agreed: **KerfLine**, "a GRBL sender built for the FoxAlien XE-Ultra 8080 and other GRBL 1.1 machines",
   with a line saying it isn't affiliated with or endorsed by FoxAlien. No FoxAlien logo, colours or "official".
 - ✅ The window, top bar and messages already say KerfLine.
-- ⬜ Rename the app, bundle id, repo and docs to KerfLine, together with signing so macOS's permissions only reset once.
-- ⬜ **Developer ID signing** in `scripts/build-app.sh` (hardened runtime, timestamp), falling back to ad-hoc without the certificate.
-  The same signature on every build lets macOS keep the Documents, Local Network and USB permissions across updates.
-- ⬜ **Release workflow**: pushing a tag `vX.Y` builds the app on GitHub's macOS 26 runner, signs it (certificate
-  as an encrypted secret), notarizes and staples it (App Store Connect API key), and attaches a `.zip` and a `.dmg`
-  to a GitHub Release. Only tags pushed to this repo run it; pull requests never see the secrets.
-- ⬜ **Updates from Releases** with Sparkle 2 (signed appcast, signature checks, safe replace and restart), driven
-  by the app's own update banner. Keep: either Mac can tell the other to update; never update mid-job. The version
-  comes from the tag, and "behind" means an older version, not missing commits.
-- ⬜ Keep the build-from-git updater as a developer option, for trying changes before releasing them.
-- ⬜ Others can download the release and open it with no Gatekeeper warning; the website links to it.
+- ✅ Repo and docs renamed (`mouldiwarp/kerfline`). Releases are **KerfLine** (`io.github.mouldiwarp.kerfline`) and
+  bring over the GCode Controller 2.0 settings on first launch; builds from git keep the old name until the Macs move.
+- ✅ **Developer ID signing** in `scripts/build-app.sh` (hardened runtime, timestamp, Sparkle signed inside out),
+  falling back to ad-hoc without the certificate.
+- ✅ **Release workflow** (`.github/workflows/release.yml`, `scripts/release.sh`): a `vX.Y` tag builds the universal
+  app on the macOS 26 runner, signs, notarizes and staples it, and makes a GitHub Release with the `.dmg`, `.zip` and
+  appcast. Unsigned or un-notarized builds stay drafts. See [docs/RELEASING.md](docs/RELEASING.md).
+- ✅ **Updates from Releases** with Sparkle 2, driven by the app's own update banner: either Mac can tell the other to
+  update, never mid-job, and "behind" means an older version. Tested end to end with a local feed (ad-hoc signed).
+- ✅ The build-from-git updater stays for builds from the checkout.
+- ⬜ **Apple Developer membership** (applied 2026-11-18), then set the secrets (docs/RELEASING.md) and tag the first
+  release. Check it opens on a fresh Mac with no Gatekeeper warning, and that the relaunch after an update works.
+- ⬜ Move both Macs to the KerfLine release; the website links to the download.
+- ⬜ Later: rename the library folder and the `gcc.*`/Bonjour names to KerfLine (needs a migration on both Macs).
 
 ## Next up
 

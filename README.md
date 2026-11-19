@@ -43,7 +43,18 @@ One native Mac app, **KerfLine**, runs on both Macs. On first launch you choose 
 
 ## Installing
 
-Both Macs need **macOS 26** and **Xcode 26** (or its Command Line Tools, for Swift 6.2). On each Mac:
+KerfLine needs **macOS 26** on an Apple-silicon or Intel Mac.
+
+### Download
+
+Get **[KerfLine.dmg](https://github.com/mouldiwarp/kerfline/releases/latest/download/KerfLine.dmg)** from the
+[latest release](https://github.com/mouldiwarp/kerfline/releases/latest), open it, and drag KerfLine to Applications.
+Releases are signed with a Developer ID and notarized by Apple, so macOS opens them without a warning. (The first
+signed release is waiting on the Apple Developer membership; until it's out, build from source.)
+
+### From source
+
+This needs **Xcode 26** (or its Command Line Tools, for Swift 6.2):
 
 ```sh
 git clone https://github.com/mouldiwarp/kerfline.git
@@ -52,9 +63,11 @@ scripts/build-app.sh
 ```
 
 That compiles the app for that Mac (about a minute; a few on an older Mac) and installs **GCode Controller 2.0** in
-`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login. (Until the signed
-releases, the installed app, its bundle id and the library folder keep their GCode Controller names, so macOS's
-permissions don't reset twice; they change to KerfLine together with signing.)
+`~/Applications`. Open it from Spotlight: ⌘Space, then type "GCode". Nothing starts at login. (A build from source
+keeps the GCode Controller name and bundle id for now; the KerfLine download is a separate app to macOS. Its first
+launch brings over the settings of a GCode Controller 2.0 on the same Mac.)
+
+### Either way
 
 - **First launch** asks whether this Mac is the **Hub** or an **Agent**, its name, and whether the machine is on
   USB here, simulated, or not on this Mac. Change it later in **Settings** (⌘,).
@@ -70,15 +83,18 @@ See **[docs/SETUP.md](docs/SETUP.md)** for the two-Mac walkthrough, including te
 
 ## Updating
 
-The app updates itself from GitHub. It checks every few hours (or **GCode Controller 2.0 ▸ Check for Updates…**),
-and **Update now** pulls the new code into the checkout it was built from, rebuilds, and restarts. If one Mac runs
-older code than the other, both show a banner, and either can tell the other to update. A Mac never updates while a
-job is running on it. If you've changed files in the checkout, the update is refused rather than touching them.
+The app checks for updates every few hours (or **KerfLine ▸ Check for Updates…**) and shows a banner when there's
+one. **Update now** downloads it, installs it and restarts. If one Mac runs an older version than the other, both
+show the banner, and either can tell the other to update. A Mac never updates while a job is running on it: an
+update that's ready waits for the job to finish.
 
-By hand: `git pull && scripts/build-app.sh`, then quit and reopen the app.
-
-Until the app is signed with a Developer ID, each rebuild is a new app to macOS's privacy settings, so after an update
-it may ask again for Documents and local network access. The start screen says so if it's waiting.
+- **Downloaded app**: updates come from GitHub Releases, through [Sparkle](https://sparkle-project.org). Each update
+  is checked against the release's signature before it's installed.
+- **Built from source**: **Update now** pulls the new code into the checkout it was built from, rebuilds, and
+  restarts. If you've changed files in the checkout, the update is refused rather than touching them. By hand:
+  `git pull && scripts/build-app.sh`, then quit and reopen the app. Until it's signed with a Developer ID, each
+  rebuild is a new app to macOS's privacy settings, so after an update it may ask again for Documents and local
+  network access. The start screen says so if it's waiting.
 
 ## The library
 
@@ -215,6 +231,7 @@ swift run gcc ports                   # serial ports (* = looks like GRBL)
 swift run gcc stream --simulate ../samples/test-square.nc
 ```
 
+Releases are built by GitHub Actions when a `vX.Y` tag is pushed: see [docs/RELEASING.md](docs/RELEASING.md).
 See [ROADMAP.md](ROADMAP.md) for what's planned.
 
 ## License

@@ -54,7 +54,23 @@ public struct AppSetup: Codable, Equatable, Sendable {
     public static var store: UserDefaults { devHome == nil ? .standard : UserDefaults(suiteName: "GCodeController.dev")! }
 
     public static func load(_ defaults: UserDefaults = store) -> AppSetup? {
-        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(AppSetup.self, from: $0) }
+        if defaults === UserDefaults.standard { migrateDefaults(from: oldBundleId, to: defaults) }
+        return defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(AppSetup.self, from: $0) }
+    }
+
+    /// Builds from git are "GCode Controller 2.0"; releases are KerfLine, with their own defaults.
+    static let oldBundleId = "io.github.mouldiwarp.gcodecontroller2"
+
+    /// The first time KerfLine runs on a Mac that ran GCode Controller 2.0, bring its settings
+    /// across (role, name, jog step, surfacing), so it carries on with the same library and link.
+    /// Returns whether it did.
+    @discardableResult
+    static func migrateDefaults(from oldDomain: String, to defaults: UserDefaults) -> Bool {
+        guard devHome == nil, Bundle.main.bundleIdentifier != oldDomain, defaults.data(forKey: key) == nil,
+            let old = UserDefaults.standard.persistentDomain(forName: oldDomain), old[key] != nil
+        else { return false }
+        for (k, v) in old where k.hasPrefix("gcc.") { defaults.set(v, forKey: k) }
+        return true
     }
 
     public func save(_ defaults: UserDefaults = AppSetup.store) {

@@ -395,7 +395,8 @@ struct Starting: View {
 
 /// Development only (GCC_HOME set): open a dialog or sheet from a script, for screenshots:
 ///   swift -e 'import Foundation; DistributedNotificationCenter.default().post(name: .init("gcc.dev.show"), object: "probe")'
-/// Objects: start:<file name>, select:<file name>, probe, resume, surfacing, settings, manager, conflicts, add, none.
+/// Objects: start:<file name>, select:<file name>, probe, resume, surfacing, settings, manager, conflicts, add, none,
+/// and check-updates / update (Check for Updates…, Update now).
 @MainActor
 enum DevShow {
     private static var observer: NSObjectProtocol?
@@ -422,6 +423,9 @@ enum DevShow {
         case "manager": model.managerOpen = true
         case "conflicts": model.conflictsOpen = true
         case "add": model.uploadOpen = true
+        case "check-updates": Task { await model.checkForUpdates(manual: true) }
+        case "update":
+            do { try model.beginUpdate() } catch { model.toast(.error, error.localizedDescription) }
         default:
             if what.hasPrefix("start:"), let f = model.state?.library.first(where: { $0.name == what.dropFirst(6) }) {
                 model.previewId = f.id

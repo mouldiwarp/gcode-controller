@@ -14,9 +14,11 @@ let package = Package(
         .executable(name: "GCodeController", targets: ["GCodeController"]),
     ],
     dependencies: [
-        // HTTP and WebSocket server (SwiftNIO). The only third-party code.
+        // HTTP and WebSocket server (SwiftNIO).
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
+        // Updates from GitHub Releases in release builds (a binary framework, embedded by build-app.sh).
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
         // Pure Swift, no I/O: G-code, GRBL protocol, shared state, resume, progress, travel, surfacing.
@@ -34,7 +36,10 @@ let package = Package(
             .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
         ]),
         // The window: SwiftUI views and the model behind them (a library so tests can reach it).
-        .target(name: "GCCUI", dependencies: ["GCCCore", "GCCMachine", "GCCLibrary", "GCCNet"]),
+        .target(name: "GCCUI", dependencies: [
+            "GCCCore", "GCCMachine", "GCCLibrary", "GCCNet",
+            .product(name: "Sparkle", package: "Sparkle"),
+        ]),
         // The app: run as Hub or Agent, chosen on first launch.
         .executableTarget(name: "GCodeController", dependencies: ["GCCUI"]),
         // Headless sender: `gcc ports`, `gcc stream [--simulate | --port P] file.nc`.

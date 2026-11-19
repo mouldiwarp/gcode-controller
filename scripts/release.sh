@@ -1,0 +1,94 @@
+#!/bin/zsh
+# Makes a release of KerfLine in dist/: the app (universal), KerfLine.zip (what Sparkle downloads),
+# KerfLine.dmg (what people download from the website) and appcast.xml (what Sparkle checks).
+# .github/workflows/release.yml runs it when a tag vX.Y is pushed; it works on a Mac too.
+#
+#   scripts/release.sh 2.1
+#
+# Each step that needs a secret is skipped without it, and dist/release.env says what was done:
+#   Developer ID signing   a "Developer ID Application" certificate in the keychain (build-app.sh)
+#   notarization           NOTARY_KEY_PATH (an App Store Connect API key, .p8), NOTARY_KEY_ID, NOTARY_ISSUER_ID
+#   appcast                SPARKLE_ED_PRIVATE_KEY (from Sparkle's generate_keys -x)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+REPO="$PWD"
+VERSION="${1:?usage: scripts/release.sh VERSION}"
+VERSION="${VERSION#v}"
+TAG="v$VERSION"
+DIST="$REPO/dist"
+APP="$DIST/KerfLine.app"
+SPARKLE_BIN="$REPO/swift/.build/artifacts/sparkle/Sparkle/bin"
+DOWNLOAD="https://github.com/mouldiwarp/kerfline/releases/download/$TAG"
+# The public half of the Sparkle key (not a secret): every update must be signed with its private half.
+export GCC_SPARKLE_PUBLIC_KEY="${GCC_SPARKLE_PUBLIC_KEY:-$(cat scripts/sparkle-public-key.txt)}"
+
+rm -rf "$DIST"
+mkdir -p "$DIST"
+GCC_RELEASE=1 GCC_VERSION="$VERSION" scripts/build-app.sh "$DIST"
+
+SIGNED=0
+codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" && SIGNED=1
+NOTARIZED=0
+notarize() {
+  xcrun notarytool submit "$1" --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+}
+if [[ "$SIGNED" == 1 && -n "${NOTARY_KEY_PATH:-}" ]]; then
+  echo "Notarizing the app…"
+  ditto -c -k --keepParent "$APP" "$DIST/notarize.zip"
+  notarize "$DIST/notarize.zip"
+  rm "$DIST/notarize.zip"
+  xcrun stapler staple "$APP"
+  NOTARIZED=1
+else
+  echo "Not notarizing (needs a Developer ID signature and NOTARY_KEY_PATH)"
+fi
+
+# What Sparkle downloads: the (stapled) app, zipped.
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$DIST/KerfLine.zip"
+
+# What people download: a disk image with the app and a link to Applications.
+STAGE="$(mktemp -d)"
+ditto "$APP" "$STAGE/KerfLine.app"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -quiet -volname "KerfLine $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO "$DIST/KerfLine.dmg"
+rm -rf "$STAGE"
+if [[ "$SIGNED" == 1 ]]; then
+  IDENTITY=$(codesign -dv "$APP" 2>&1 | awk -F= '/^Authority=Developer ID Application/ { print $2; exit }')
+  codesign --force --sign "$IDENTITY" --timestamp "$DIST/KerfLine.dmg"
+  if [[ "$NOTARIZED" == 1 ]]; then
+    echo "Notarizing the disk image…"
+    notarize "$DIST/KerfLine.dmg"
+    xcrun stapler staple "$DIST/KerfLine.dmg"
+  fi
+fi
+
+APPCAST=0
+if [[ -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
+  SIG=$(print -rn -- "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_BIN/sign_update" --ed-key-file - "$DIST/KerfLine.zip")
+  BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")
+  cat > "$DIST/appcast.xml" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>KerfLine</title>
+    <item>
+      <title>KerfLine $VERSION</title>
+      <pubDate>$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
+      <link>https://github.com/mouldiwarp/kerfline/releases/tag/$TAG</link>
+      <sparkle:version>$BUILD</sparkle:version>
+      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:fullReleaseNotesLink>https://github.com/mouldiwarp/kerfline/releases/tag/$TAG</sparkle:fullReleaseNotesLink>
+      <enclosure url="${GCC_DOWNLOAD_URL:-$DOWNLOAD}/KerfLine.zip" type="application/octet-stream" $SIG />
+    </item>
+  </channel>
+</rss>
+XML
+  APPCAST=1
+else
+  echo "No appcast (needs SPARKLE_ED_PRIVATE_KEY)"
+fi
+
+printf 'VERSION=%s\nSIGNED=%s\nNOTARIZED=%s\nAPPCAST=%s\n' "$VERSION" "$SIGNED" "$NOTARIZED" "$APPCAST" > "$DIST/release.env"
+echo "== dist/: $(cd "$DIST" && ls | tr '\n' ' ')"
+cat "$DIST/release.env"

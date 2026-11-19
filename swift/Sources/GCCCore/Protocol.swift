@@ -327,12 +327,27 @@ public struct CodeVersion: Codable, Equatable, Sendable {
     public var shortCommit: String { commit.map { String($0.prefix(7)) } ?? "unknown" }
 }
 
+/// "2.1.0" → [2, 1, 0]; nil unless it's dot-separated numbers (an optional leading "v").
+func versionNumbers(_ version: String) -> [Int]? {
+    let v = version.hasPrefix("v") ? version.dropFirst() : Substring(version)
+    let parts = v.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+    guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return nil }
+    return parts.compactMap { $0 }
+}
+
 public enum CodeComparison: String, Sendable {
     case same, behind, ahead, different, unknown
 }
 
-/// How `mine` compares with `theirs`, by commit and commit time.
+/// How `mine` compares with `theirs`: by release version when those differ ("2.1" is behind
+/// "2.1.1", and "2.1" is "2.1.0"), otherwise by commit and commit time.
 public func compareCode(_ mine: CodeVersion?, _ theirs: CodeVersion?) -> CodeComparison {
+    if let va = mine.flatMap({ versionNumbers($0.version) }), let vb = theirs.flatMap({ versionNumbers($0.version) }) {
+        let n = max(va.count, vb.count)
+        let pa = va + Array(repeating: 0, count: n - va.count)
+        let pb = vb + Array(repeating: 0, count: n - vb.count)
+        if pa != pb { return pa.lexicographicallyPrecedes(pb) ? .behind : .ahead }
+    }
     guard let a = mine?.commit, let b = theirs?.commit else { return .unknown }
     if a == b { return .same }
     guard let ta = mine?.time, let tb = theirs?.time else { return .different }

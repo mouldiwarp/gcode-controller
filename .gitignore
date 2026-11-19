@@ -4,3 +4,6 @@
 # Swift package builds
 swift/.build/
 swift/.swiftpm/
+
+# scripts/release.sh output
+dist/

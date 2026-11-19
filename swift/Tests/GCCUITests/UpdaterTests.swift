@@ -133,3 +133,24 @@ struct UpdaterTests {
         #expect(!k.isOn)
     }
 }
+
+struct DefaultsMigrationTests {
+    @Test func kerfLineTakesOverGCodeControllersSettingsOnce() throws {
+        let old = "gcc-tests.old.\(UUID().uuidString)"
+        let newSuite = "gcc-tests.new.\(UUID().uuidString)"
+        defer {
+            UserDefaults.standard.removePersistentDomain(forName: old)
+            UserDefaults.standard.removePersistentDomain(forName: newSuite)
+        }
+        let setup = try JSONEncoder().encode(AppSetup(role: .agent, name: "Garage", machine: .none))
+        UserDefaults.standard.setPersistentDomain(["gcc.setup": setup, "gcc.jogStep": 10.0, "NSWindow Frame main": "x"], forName: old)
+        let new = try #require(UserDefaults(suiteName: newSuite))
+
+        #expect(AppSetup.migrateDefaults(from: old, to: new))
+        #expect(AppSetup.load(new)?.name == "Garage")
+        #expect(new.double(forKey: "gcc.jogStep") == 10)
+        #expect(new.object(forKey: "NSWindow Frame main") == nil)
+        // Once it has its own setup, it's left alone.
+        #expect(!AppSetup.migrateDefaults(from: old, to: new))
+    }
+}

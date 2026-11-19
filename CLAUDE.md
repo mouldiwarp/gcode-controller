@@ -19,7 +19,8 @@ swift test --filter "GCCLibraryTests.SyncTests"       # one suite (swift-testing
 swift run GCodeController        # run the app without installing
 swift run gcc ports              # list serial ports (* = looks like GRBL)
 swift run gcc stream --simulate ../samples/test-square.nc   # stream to the built-in GRBL simulator
-scripts/build-app.sh             # release build, ad-hoc sign, install to ~/Applications
+scripts/build-app.sh             # build from git: "GCode Controller 2.0", installed to ~/Applications
+scripts/release.sh 2.1           # a KerfLine release in dist/ (universal app, dmg, zip, appcast); CI runs it on a v* tag
 ```
 
 By default `scripts/ci.sh` tests `HEAD`, so commit before relying on it.
@@ -62,15 +63,20 @@ Key behaviours that span modules:
 - **Jobs stream from the owning Mac's own copy** of the library, never over the network, so Wi-Fi drops can't starve
   the machine. File groups are copied over before the first file starts.
 - **Both Macs hold a full library replica**; `LibrarySync` exchanges change logs whenever linked.
-- **Self-update**: `build-app.sh` bakes `GCCRepoPath`/`GCCCommit`/`GCCCommitTime` into Info.plist; the app pulls and
-  rebuilds that checkout, refuses if it's dirty, and never updates while a job runs on that Mac.
+- **Self-update**, two ways, both driving the same update banner and never installing while a job runs on that Mac:
+  - Builds from git: `build-app.sh` bakes `GCCRepoPath`/`GCCCommit`/`GCCCommitTime` into Info.plist; the app pulls and
+    rebuilds that checkout, and refuses if it's dirty (`Updater.swift`).
+  - Releases (`GCC_RELEASE=1`, Info.plist has `SUFeedURL`): Sparkle 2 with a custom user driver
+    (`ReleaseUpdater.swift`), feed `releases/latest/download/appcast.xml`, EdDSA public key in
+    `scripts/sparkle-public-key.txt`. Publishing, secrets and the website links: `docs/RELEASING.md`.
 
 ## Naming in transition
 
 The product name is **KerfLine** (repo `mouldiwarp/kerfline`, UI text), but the Swift package, modules (`GCC*`),
 installed app name ("GCode Controller 2.0"), bundle id, library folder, `gcc.*` defaults keys and Bonjour types keep the
 old GCode Controller names on purpose: they change together with Developer ID signing (ROADMAP phase 9) so macOS
-permissions reset only once. Don't rename them piecemeal.
+permissions reset only once. Don't rename them piecemeal. Release builds already use "KerfLine" and
+`io.github.mouldiwarp.kerfline`, and copy the old bundle id's `gcc.*` defaults on first launch (`Setup.swift`).
 
 ## Docs
 

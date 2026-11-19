@@ -1,7 +1,8 @@
-// Updating the app from its git checkout, as 1.0 did: fetch to see whether there's newer code,
-// then pull, rebuild and reinstall with scripts/build-app.sh, and relaunch the new copy. The build
-// script stamps the commit it built into Info.plist, so the app knows which code it runs even
-// after the checkout is pulled.
+// Updating a build from git, as 1.0 did: fetch to see whether there's newer code, then pull,
+// rebuild and reinstall with scripts/build-app.sh, and relaunch the new copy. The build script
+// stamps the commit it built into Info.plist, so the app knows which code it runs even after the
+// checkout is pulled. Release builds (from GitHub Releases) update with Sparkle instead: see
+// ReleaseUpdater.
 
 import AppKit
 import Foundation
@@ -14,11 +15,14 @@ public struct BuildInfo: Sendable, Equatable {
     public var repo: URL?
     /// The app bundle, when running from one (not `swift run`).
     public var bundle: URL?
+    /// A release build's appcast (Sparkle's SUFeedURL): it updates from GitHub Releases, not git.
+    public var feed: URL?
 
-    public init(code: CodeVersion, repo: URL?, bundle: URL?) {
+    public init(code: CodeVersion, repo: URL?, bundle: URL?, feed: URL? = nil) {
         self.code = code
         self.repo = repo
         self.bundle = bundle
+        self.feed = feed
     }
 
     /// Read from Info.plist (stamped by build-app.sh); a dev run finds the checkout above the executable.
@@ -28,10 +32,11 @@ public struct BuildInfo: Sendable, Equatable {
         let commit = info["GCCCommit"] as? String
         let time = (info["GCCCommitTime"] as? String).flatMap(Double.init).map { $0 * 1000 }
         let bundle = Bundle.main.bundleURL.pathExtension == "app" ? Bundle.main.bundleURL : nil
+        let feed = (info["SUFeedURL"] as? String).flatMap(URL.init(string:))
         var repo = (info["GCCRepoPath"] as? String).map { URL(fileURLWithPath: $0) }
-        if repo == nil, let exe = Bundle.main.executableURL { repo = findRepo(above: exe) }
+        if repo == nil, feed == nil, let exe = Bundle.main.executableURL { repo = findRepo(above: exe) }
         if let r = repo, !FileManager.default.fileExists(atPath: r.appending(path: ".git").path) { repo = nil }
-        return BuildInfo(code: CodeVersion(version: version, commit: commit, time: time), repo: repo, bundle: bundle)
+        return BuildInfo(code: CodeVersion(version: version, commit: commit, time: time), repo: repo, bundle: bundle, feed: feed)
     }()
 
     static func findRepo(above url: URL) -> URL? {
@@ -43,8 +48,12 @@ public struct BuildInfo: Sendable, Equatable {
         return nil
     }
 
-    /// Updating rebuilds and relaunches the app bundle, so it needs both.
-    public var canUpdate: Bool { repo != nil && bundle != nil }
+    /// A release build, updated from GitHub Releases.
+    public var isRelease: Bool { feed != nil && bundle != nil }
+
+    /// A build from git rebuilds and relaunches the app bundle, so it needs both; a release
+    /// build downloads the next release.
+    public var canUpdate: Bool { isRelease || (repo != nil && bundle != nil) }
 }
 
 /// What a check found.
@@ -55,6 +64,8 @@ public struct UpdateCheck: Sendable, Equatable {
     public var latest: CodeVersion?
     /// The first line of each new commit's message, newest first.
     public var changes: [String]
+    /// A release build: the version on offer.
+    public var version: String? = nil
 }
 
 public struct UpdateError: Error, LocalizedError {

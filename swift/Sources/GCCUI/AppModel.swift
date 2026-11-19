@@ -81,6 +81,8 @@ public final class AppModel {
     public let build: BuildInfo
     public private(set) var update: UpdateStatus = .idle
     private var checkTask: Task<Void, Never>?
+    /// A release build's updater (Sparkle); nil for a build from git.
+    private var release: ReleaseUpdater?
     private let keepAwake = KeepAwake()
     /// Keeping this Mac awake because it owns the machine.
     public var keepingAwake: Bool { keepAwake.isOn }
@@ -321,12 +323,16 @@ public final class AppModel {
     }
 
     private func updater() -> Updater? {
-        guard build.canUpdate, let repo = build.repo, let app = build.bundle else { return nil }
+        guard !build.isRelease, let repo = build.repo, let app = build.bundle else { return nil }
         return Updater(repo: repo, built: build.code.commit, installDir: app.deletingLastPathComponent())
     }
 
-    /// Check soon after launch, then every few hours.
+    /// Check soon after launch, then every few hours (a release build: Sparkle's own schedule).
     private func startUpdateChecks() {
+        if build.isRelease {
+            startReleaseUpdater()
+            return
+        }
         guard checkTask == nil, build.canUpdate else { return }
         checkTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))
@@ -337,7 +343,36 @@ public final class AppModel {
         }
     }
 
+    private func startReleaseUpdater() {
+        guard release == nil else { return }
+        let r = ReleaseUpdater()
+        r.onStatus = { [weak self] in self?.update = $0 }
+        r.onStep = { [weak self] step in
+            guard let self else { return }
+            Task { await self.instance?.announce(.info, "\(self.name): \(step)…") }
+        }
+        r.onToast = { [weak self] in self?.toast($0, $1) }
+        r.jobRunning = { [weak self] in self?.jobRunningHere ?? false }
+        do {
+            try r.start()
+            release = r
+        } catch {
+            toast(.warn, "Updates are off: \(error.localizedDescription)")
+        }
+    }
+
     public func checkForUpdates(manual: Bool) async {
+        if build.isRelease {
+            guard let release else {
+                if manual { toast(.warn, "Updates are off on this Mac") }
+                return
+            }
+            switch update {
+            case .running, .ready: return
+            default: release.check(manual: manual)
+            }
+            return
+        }
         guard let u = updater() else {
             if manual { toast(.warn, "This copy can't update itself: it wasn't installed with scripts/build-app.sh") }
             return
@@ -360,6 +395,13 @@ public final class AppModel {
     /// Pull, rebuild and reinstall, then restart (from this Mac's banner, or asked by the other Mac).
     /// Returns once it's under way; throws if it can't start.
     public func beginUpdate() throws {
+        if build.isRelease {
+            guard let release else { throw UpdateError("Updates are off on \(name)") }
+            if case .running = update { throw UpdateError("\(name) is already updating") }
+            if jobRunningHere { throw UpdateError("A job is running on \(name). Update it when the job has finished") }
+            release.install()
+            return
+        }
         guard let u = updater() else { throw UpdateError("\(name) can't update itself: it wasn't installed with scripts/build-app.sh") }
         if case .running = update { throw UpdateError("\(name) is already updating") }
         if jobRunningHere { throw UpdateError("A job is running on \(name). Update it when the job has finished") }
@@ -390,11 +432,16 @@ public final class AppModel {
 
     /// Quit and open the newly built app.
     public func restartNow() {
-        guard !jobRunningHere, let app = build.bundle else { return }
+        guard !jobRunningHere else { return }
+        if let release, release.installReady() { return }
+        guard let app = build.bundle else { return }
         do { try relaunch(app) } catch { toast(.error, "Couldn't restart: \(error.localizedDescription). Quit and open it again") }
     }
 
-    public func dismissUpdate() { update = .idle }
+    public func dismissUpdate() {
+        release?.dismiss()
+        update = .idle
+    }
 
     /// A job is running on this Mac's machine (quitting would stop it).
     public var jobRunningHere: Bool {

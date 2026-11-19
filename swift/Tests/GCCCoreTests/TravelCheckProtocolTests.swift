@@ -88,8 +88,26 @@ import Testing
         #expect(compareCode(at("b", 2), at("a", 1)) == .ahead)
         #expect(compareCode(at("a", 1), at("b", 1)) == .different)
         #expect(compareCode(at("a"), at("b", 1)) == .different)
-        #expect(compareCode(CodeVersion(version: "1"), at("b", 1)) == .unknown)
+        #expect(compareCode(CodeVersion(version: "0.1.0"), at("b", 1)) == .unknown)
         #expect(at("abcdef123").shortCommit == "abcdef1")
+    }
+
+    @Test func ordersReleasesByVersionFirst() {
+        func v(_ version: String, _ commit: String? = nil, _ time: Double? = nil) -> CodeVersion {
+            CodeVersion(version: version, commit: commit, time: time)
+        }
+        // A newer release is ahead even if its commit is older (a fix released from a branch).
+        #expect(compareCode(v("2.1", "b", 1), v("2.2", "a", 2)) == .behind)
+        #expect(compareCode(v("2.10", "b", 9), v("2.9", "a", 1)) == .ahead)
+        #expect(compareCode(v("2.1", "b", 2), v("2.1.1", "a", 1)) == .behind)
+        // Equal versions ("2.1" is "2.1.0"): a build from git after the tag is ahead of the release.
+        #expect(compareCode(v("v2.1", "a", 1), v("2.1.0", "b", 2)) == .behind)
+        #expect(compareCode(v("2.1", "a", 1), v("2.1", "a", 1)) == .same)
+        // Releases without commits still compare.
+        #expect(compareCode(v("2.1"), v("2.2")) == .behind)
+        #expect(compareCode(v("2.1"), v("2.1")) == .unknown)
+        // Not a version number: commits decide.
+        #expect(compareCode(v("dev", "a", 1), v("2.2", "b", 2)) == .behind)
     }
 
     @Test func commandsEncodeAs1_0Json() throws {

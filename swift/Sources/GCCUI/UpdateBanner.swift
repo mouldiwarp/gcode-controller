@@ -26,7 +26,7 @@ struct UpdateBanner: View {
             Banner(kind: .info, text: availableText(c)) {
                 if model.jobRunningHere { Text("Finish the job first").font(.system(size: 11.5)).foregroundStyle(Color.steel) }
                 Button("Update now") { tryUpdate() }.gccButton(.primary, .small).disabled(model.jobRunningHere)
-                    .help("Download the latest code, rebuild the app and restart it")
+                    .help(model.build.isRelease ? "Download the new release, install it and restart" : "Download the latest code, rebuild the app and restart it")
                 Button("Later") { model.dismissUpdate() }.gccButton(.ghost, .small)
             }
         case .idle, .checking:
@@ -42,7 +42,7 @@ struct UpdateBanner: View {
                 Banner(kind: .info, text: "\(other) runs older code (\(describe(theirs))) than this Mac (\(describe(model.build.code))).") {
                     if let role = model.peerRole {
                         Button("Update \(other)") { model.send(.update(target: role)) }.gccButton(.normal, .small)
-                            .help("Ask \(other) to download the latest code, rebuild and restart")
+                            .help("Ask \(other) to update itself and restart")
                     }
                 }
             case .behind where model.build.canUpdate:
@@ -60,14 +60,18 @@ struct UpdateBanner: View {
     }
 
     private func availableText(_ c: UpdateCheck) -> String {
+        if let v = c.version { return "KerfLine \(v) is available (this Mac has \(model.build.code.version))" }
         let what = c.behind == 1 ? "1 new change" : "\(c.behind) new changes"
         let latest = c.changes.first.map { ", latest: \($0)" } ?? ""
         return "An update is available: \(what)\(latest)"
     }
 }
 
+/// "2.1, abc1234, 18 Nov"
 func describe(_ c: CodeVersion) -> String {
-    guard let t = c.time else { return c.shortCommit }
-    let d = Date(timeIntervalSince1970: t / 1000).formatted(.dateTime.day().month(.abbreviated))
-    return "\(c.shortCommit), \(d)"
+    var parts: [String] = []
+    if !c.version.isEmpty { parts.append(c.version) }
+    if c.commit != nil { parts.append(c.shortCommit) }
+    if let t = c.time { parts.append(Date(timeIntervalSince1970: t / 1000).formatted(.dateTime.day().month(.abbreviated))) }
+    return parts.isEmpty ? "unknown" : parts.joined(separator: ", ")
 }
