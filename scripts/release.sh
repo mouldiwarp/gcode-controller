@@ -27,7 +27,9 @@ mkdir -p "$DIST"
 GCC_RELEASE=1 GCC_VERSION="$VERSION" scripts/build-app.sh "$DIST"
 
 SIGNED=0
-codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" && SIGNED=1
+# The signer is only listed at -dvv. Capture it first: grep -q under pipefail can fail on SIGPIPE.
+IDENTITY=$(codesign -dvv "$APP" 2>&1 | awk -F= '!f && /^Authority=Developer ID Application/ { print $2; f = 1 }')
+[[ -n "$IDENTITY" ]] && SIGNED=1
 NOTARIZED=0
 notarize() {
   xcrun notarytool submit "$1" --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
@@ -53,7 +55,6 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -quiet -volname "KerfLine $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO "$DIST/KerfLine.dmg"
 rm -rf "$STAGE"
 if [[ "$SIGNED" == 1 ]]; then
-  IDENTITY=$(codesign -dv "$APP" 2>&1 | awk -F= '/^Authority=Developer ID Application/ { print $2; exit }')
   codesign --force --sign "$IDENTITY" --timestamp "$DIST/KerfLine.dmg"
   if [[ "$NOTARIZED" == 1 ]]; then
     echo "Notarizing the disk image…"
