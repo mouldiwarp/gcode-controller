@@ -124,12 +124,16 @@ struct DiskRow {
 }
 
 struct Analysis: Codable {
+    /// Bumped when the analysis gains something, so cached rows from an older build are worked out again.
+    static let current = 2
+    var version: Int?
     var size: Int
     var sourceLines: Int
     var streamLines: Int
     var bounds: Bounds?
     var cutBounds: Bounds?
     var estSeconds: Double
+    var spindleOffCut: Int?
 }
 
 public actor Library {
@@ -703,16 +707,17 @@ public actor Library {
 
     /// Line counts, bounds and run time, worked out once per content.
     func analysis(_ sha: String, _ data: Data? = nil) throws -> Analysis? {
-        if let json = try db.query("SELECT json FROM analysis WHERE sha=?", [sha]).first?.string("json") {
-            return try? JSONDecoder().decode(Analysis.self, from: Data(json.utf8))
-        }
-        guard let data = data ?? blobs.get(sha), !data.isEmpty, !data.contains(0) else { return nil }
+        let cached = try db.query("SELECT json FROM analysis WHERE sha=?", [sha]).first?.string("json")
+            .flatMap { try? JSONDecoder().decode(Analysis.self, from: Data($0.utf8)) }
+        if let cached, cached.version == Analysis.current { return cached }
+        // An older build's row: work it out again, or keep it while the content hasn't arrived from the other Mac.
+        guard let data = data ?? blobs.get(sha), !data.isEmpty, !data.contains(0) else { return cached }
         let text = String(decoding: data, as: UTF8.self)
         let a = analyzeProgram(text, options: InterpreterOptions(rapidRate: config().rapidRate), keepSegments: false)
         guard a.streamLines > 0 else { return nil }
         let result = Analysis(
-            size: data.count, sourceLines: a.sourceLines, streamLines: a.streamLines, bounds: a.bounds, cutBounds: a.cutBounds,
-            estSeconds: a.estSeconds)
+            version: Analysis.current, size: data.count, sourceLines: a.sourceLines, streamLines: a.streamLines, bounds: a.bounds,
+            cutBounds: a.cutBounds, estSeconds: a.estSeconds, spindleOffCut: a.spindleOffCut)
         try db.run("INSERT OR REPLACE INTO analysis(sha, json) VALUES(?, ?)", [sha, json(result)])
         return result
     }
@@ -722,7 +727,7 @@ public actor Library {
         return LibraryItem(
             id: e.id, name: e.name, folder: e.folder, source: e.source, size: a.size, sha256: e.sha, addedAt: e.addedAt,
             sourceLines: a.sourceLines, streamLines: a.streamLines, bounds: a.bounds, cutBounds: a.cutBounds,
-            estSeconds: a.estSeconds, group: e.group, groupIndex: e.groupIndex)
+            estSeconds: a.estSeconds, group: e.group, groupIndex: e.groupIndex, spindleOffCut: a.spindleOffCut)
     }
 
     func gcBlobs() {

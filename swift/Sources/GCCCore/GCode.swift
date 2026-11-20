@@ -338,6 +338,9 @@ public struct ProgramAnalysis: Sendable {
     public var rapidDistance: Double
     /// The program starts the spindle (M3/M4).
     public var usesSpindle: Bool
+    /// 0-based source line of the first feed move made with the spindle off (never started, M5, or S0), if any.
+    /// GRBL runs such a move: the cutter is driven into the work standing still. Probe moves don't count.
+    public var spindleOffCut: Int?
 }
 
 /// Split on \r\n, \r or \n, keeping empty lines (so indexes match the file's lines).
@@ -381,12 +384,15 @@ public func analyzeProgram(_ text: String, options: InterpreterOptions = .init()
     var rapidDistance = 0.0
     var streamLines = 0
     var usesSpindle = false
+    var spindle = SpindleTracker()
+    var spindleOffCut: Int?
 
     for (i, raw) in lines.enumerated() {
         let clean = cleanLine(raw)
         if clean.isEmpty { continue }
         streamLines += 1
         if !usesSpindle && startsSpindle(clean) { usesSpindle = true }
+        if spindle.cutsWithSpindleOff(clean), spindleOffCut == nil { spindleOffCut = i }
         for s in interp.step(clean, line: i) {
             let len = s.length
             if s.type == .rapid {
@@ -406,7 +412,67 @@ public func analyzeProgram(_ text: String, options: InterpreterOptions = .init()
     est += interp.dwellSeconds
     return ProgramAnalysis(
         sourceLines: lines.count, streamLines: streamLines, segments: segments, bounds: bounds, cutBounds: cutBounds,
-        estSeconds: est, feedDistance: feedDistance, rapidDistance: rapidDistance, usesSpindle: usesSpindle)
+        estSeconds: est, feedDistance: feedDistance, rapidDistance: rapidDistance, usesSpindle: usesSpindle,
+        spindleOffCut: spindleOffCut)
+}
+
+/// 0-based source line of the first feed move at or after source line `from` made with the spindle off: the
+/// spindle never started, stopped with M5 or M2/M30, or set to S0. Probe moves (G38.x) don't count.
+public func spindleOffCut(_ text: String, from: Int = 0) -> Int? {
+    spindleOffCuts(text).first { $0 >= from }
+}
+
+/// Every source line (0-based, ascending) with a feed move made with the spindle off; see `spindleOffCut`.
+public func spindleOffCuts(_ text: String) -> [Int] {
+    var spindle = SpindleTracker()
+    var out: [Int] = []
+    for (i, raw) in splitLines(text).enumerated() {
+        let clean = cleanLine(raw)
+        if !clean.isEmpty, spindle.cutsWithSpindleOff(clean) { out.append(i) }
+    }
+    return out
+}
+
+/// Why a start was refused: `line` is 0-based, from `spindleOffCut`.
+public func spindleOffMessage(_ fileName: String, _ line: Int) -> String {
+    "\(fileName) cuts with the spindle off: line \(line + 1) is a cutting move, and the program hasn't started the spindle "
+        + "(M3 with an S speed) by then. Add M3 S… to the file, or confirm in the Start dialog that the spindle is run by hand"
+}
+
+/// Whether the spindle is turning as a program runs, line by line. Works from the words alone, not from drawn moves:
+/// the interpreter draws nothing until every axis has a position, and a cut before that still cuts.
+struct SpindleTracker {
+    var direction = 5.0
+    var speed = 0.0
+    /// Modal motion: 0-3 for G0-G3, -1 after G80 or G38.x.
+    var motion = 0.0
+    var on: Bool { direction != 5 && speed > 0 }
+
+    /// Applies a cleaned line, and says whether it makes a feed move (G1/G2/G3) with the spindle off. GRBL starts the
+    /// spindle before it runs a block's motion, so an M3 on the same line counts. Probing (G38.x) and the axis words
+    /// of non-motion commands (G10, G28, G30, G92) aren't cuts.
+    mutating func cutsWithSpindleOff(_ clean: String) -> Bool {
+        var moves = false, arcWords = false, nonMotion = false
+        var stopAfter = false
+        for w in parseWords(clean) {
+            switch w.letter {
+            case "M" where w.value == 3 || w.value == 4 || w.value == 5: direction = w.value
+            case "M" where w.value == 2 || w.value == 30: stopAfter = true   // program end stops the spindle
+            case "S": speed = w.value
+            case "G" where [0, 1, 2, 3].contains(w.value): motion = w.value
+            case "G" where w.value == 80: motion = -1
+            case "G" where w.value >= 38 && w.value < 39: motion = -1   // probing is modal too
+            case "G" where [10, 28, 30, 92, 28.1, 30.1, 92.1].contains(w.value): nonMotion = true
+            case "X", "Y", "Z": moves = true
+            case "I", "J", "K", "R": arcWords = true
+            default: break
+            }
+        }
+        let feed = motion == 1 || motion == 2 || motion == 3
+        let cuts = feed && !nonMotion && (moves || (motion != 1 && arcWords)) && !on
+        if stopAfter { direction = 5 }
+        return cuts
+    }
 }
 
 public struct StreamLine: Equatable, Sendable {

@@ -7,7 +7,7 @@ import Testing
 @testable import GCCNet
 
 func gcode(_ n: Int = 3) -> Data {
-    Data((["G21 G90", "G0 Z5"] + (0..<n).map { "G1 X\($0) Y\($0) F1000" } + ["M30"]).joined(separator: "\n").utf8)
+    Data((["G21 G90", "M3 S12000", "G0 Z5"] + (0..<n).map { "G1 X\($0) Y\($0) F1000" } + ["M30"]).joined(separator: "\n").utf8)
 }
 
 /// A temporary folder per test (the previous run's are removed).
@@ -120,5 +120,5 @@ actor Toasts {
 
 /// A job that stays inside the simulator's travel (machine coordinates are negative).
 func job(_ n: Int) -> Data {
-    Data((["G21 G90", "G0 Z-1"] + (1...n).map { "G1 X-\($0) Y-\($0) F3000" } + ["G0 Z-1", "M30"]).joined(separator: "\n").utf8)
+    Data((["G21 G90", "M3 S12000", "G0 Z-1"] + (1...n).map { "G1 X-\($0) Y-\($0) F3000" } + ["G0 Z-1", "M30"]).joined(separator: "\n").utf8)
 }

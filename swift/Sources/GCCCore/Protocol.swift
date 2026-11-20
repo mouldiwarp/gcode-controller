@@ -179,11 +179,14 @@ public struct LibraryItem: Codable, Equatable, Sendable, Identifiable {
     public var estSeconds: Double
     public var group: String?
     public var groupIndex: Int?
+    /// 0-based source line of the first cutting move made with the spindle off, if the program has one
+    /// (see `ProgramAnalysis.spindleOffCut`). Nil from a Mac that predates the check.
+    public var spindleOffCut: Int?
 
     public init(
         id: String, name: String, folder: String, source: String, size: Int, sha256: String, addedAt: Double,
         sourceLines: Int, streamLines: Int, bounds: Bounds?, cutBounds: Bounds?, estSeconds: Double,
-        group: String? = nil, groupIndex: Int? = nil
+        group: String? = nil, groupIndex: Int? = nil, spindleOffCut: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -199,6 +202,7 @@ public struct LibraryItem: Codable, Equatable, Sendable, Identifiable {
         self.estSeconds = estSeconds
         self.group = group
         self.groupIndex = groupIndex
+        self.spindleOffCut = spindleOffCut
     }
 }
 
@@ -391,7 +395,8 @@ public enum Command: Equatable, Sendable {
     case mdi(line: String)
     case runMacro(id: String)
     /// `group`: run the rest of the file's group after it. `fromLine`: resume from this stream line.
-    case start(fileId: String, group: Bool?, fromLine: Int?)
+    /// `spindleOff`: the user confirmed running a program that cuts with the spindle off (see `spindleOffCut`).
+    case start(fileId: String, group: Bool?, fromLine: Int?, spindleOff: Bool? = nil)
     case spindleStop
     case startNext
     case probeZ
@@ -463,7 +468,7 @@ public enum Command: Equatable, Sendable {
 
 extension Command: Codable {
     private enum Key: String, CodingKey {
-        case type, port, x, y, z, feed, axes, line, id, fileId, group, fromLine, kind, action, name, folder, path, to, macro, config, target
+        case type, port, x, y, z, feed, axes, line, id, fileId, group, fromLine, spindleOff, kind, action, name, folder, path, to, macro, config, target
     }
 
     public init(from decoder: Decoder) throws {
@@ -490,7 +495,8 @@ extension Command: Codable {
         case "start":
             self = .start(
                 fileId: try s(.fileId), group: try c.decodeIfPresent(Bool.self, forKey: .group),
-                fromLine: try c.decodeIfPresent(Int.self, forKey: .fromLine))
+                fromLine: try c.decodeIfPresent(Int.self, forKey: .fromLine),
+                spindleOff: try c.decodeIfPresent(Bool.self, forKey: .spindleOff))
         case "spindleStop": self = .spindleStop
         case "startNext": self = .startNext
         case "probeZ": self = .probeZ
@@ -527,10 +533,11 @@ extension Command: Codable {
         case .zero(let axes), .goToZero(let axes): try c.encode(axes, forKey: .axes)
         case .mdi(let line): try c.encode(line, forKey: .line)
         case .runMacro(let id), .deleteMacro(let id): try c.encode(id, forKey: .id)
-        case .start(let fileId, let group, let fromLine):
+        case .start(let fileId, let group, let fromLine, let spindleOff):
             try c.encode(fileId, forKey: .fileId)
             try c.encodeIfPresent(group, forKey: .group)
             try c.encodeIfPresent(fromLine, forKey: .fromLine)
+            try c.encodeIfPresent(spindleOff, forKey: .spindleOff)
         case .override(let kind, let action):
             try c.encode(kind, forKey: .kind)
             try c.encode(action, forKey: .action)

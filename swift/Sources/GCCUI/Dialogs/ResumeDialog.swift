@@ -14,6 +14,9 @@ struct ResumeDialog: View {
     /// 1-based.
     @State private var line = 1.0
     @State private var busy = false
+    /// Source lines that cut with the spindle off.
+    @State private var offCuts: [Int] = []
+    @State private var spindleByHand = false
 
     var body: some View {
         if let s = model.state { content(s) }
@@ -28,7 +31,9 @@ struct ResumeDialog: View {
             return Result { try planResume(t, index, ResumeOptions(travelZ: s.config.safeZ, spinup: 4, plungeFeed: 300)) }
         }
         let planned = try? plan?.get()
+        let offCut = index >= 0 && index < lines.count ? offCuts.first { $0 >= lines[index].source } : nil
         let blocked = s.notIdleReason ?? (job.fileId == nil ? "No job to resume" : nil) ?? planFailure(plan)
+            ?? (offCut != nil && !spindleByHand ? "The program cuts with the spindle off" : nil)
         return DialogFrame(eyebrow: "Resume job", title: job.fileName ?? "Job", width: 640) {
             if let error { Note(.danger, error) }
             if text == nil, error == nil { Muted("Loading the file…") }
@@ -62,6 +67,7 @@ struct ResumeDialog: View {
                 }
                 if !p.state.warnings.isEmpty { Note(.warn, p.state.warnings.joined(separator: ". ") + ".") }
             }
+            if let offCut, let name = job.fileName { SpindleOffConfirm(cuts: [(name, offCut)], byHand: $spindleByHand) }
             Muted("Before resuming: the same bit is fitted, nothing is in the way, and work zero hasn't changed. If the machine was switched off or raised an alarm, home it first (work zero is kept).")
             BlockedHint(text: blocked)
         } actions: {
@@ -70,7 +76,7 @@ struct ResumeDialog: View {
                 guard let id = job.fileId else { return }
                 busy = true
                 Task {
-                    let ok = await model.run(.start(fileId: id, group: nil, fromLine: index))
+                    let ok = await model.run(.start(fileId: id, group: nil, fromLine: index, spindleOff: offCut == nil ? nil : true))
                     busy = false
                     if ok { dismiss() }
                 }
@@ -98,8 +104,9 @@ struct ResumeDialog: View {
             error = "Could not load the file"
             return
         }
-        let ls = await Task.detached { streamableLines(t) }.value
+        let (ls, off) = await Task.detached { (streamableLines(t), spindleOffCuts(t)) }.value
         lines = ls
+        offCuts = off
         text = t
         line = Double((job.resumeLine ?? 0) + 1)
     }

@@ -270,6 +270,28 @@ actor Got {
         #expect(await until(20000) { await m.agent.session.job.status == .done })
     }
 
+    /// A program that cuts without ever starting the spindle (Fretboard Modeller with a manual spindle, say) is
+    /// refused at Start, on the Mac that owns the machine, unless the user confirmed it; the library item says so too.
+    @Test func aProgramThatNeverStartsTheSpindleNeedsConfirming() async throws {
+        let m = Macs()
+        try await m.startHub()
+        try await m.startAgent(machine: fastSim)
+        defer { Task { await m.stop() } }
+        #expect(await m.linked())
+        try await m.agent.execute(.connect(port: nil), by: "Garage")
+        #expect(await until { await m.agent.state().machine.status == .idle })
+        let text = "(no spindle)\nG21\nG90\nG0 Z-1\nG1 Z-2 F300\nG1 X-10 F1000\nM2\n"
+        let item = try await m.hub.library.add(Data(text.utf8), AddOptions(name: "board.nc"))
+        #expect(item.spindleOffCut == 4)
+        #expect(await until { await m.agent.library.content(item.id) != nil })
+        await #expect(throws: MachineError(spindleOffMessage("board.nc", 4))) {
+            try await m.hub.execute(.start(fileId: item.id, group: nil, fromLine: nil), by: "Design")
+        }
+        #expect(await m.agent.session.job.status != .running)
+        try await m.hub.execute(.start(fileId: item.id, group: nil, fromLine: nil, spindleOff: true), by: "Design")
+        #expect(await until { await m.agent.session.job.status == .done })
+    }
+
     @Test func scriptsOnThisMacCanSendCommands() async throws {
         let m = Macs()
         try await m.startHub(machine: fastSim)

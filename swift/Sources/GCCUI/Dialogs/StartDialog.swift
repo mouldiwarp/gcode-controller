@@ -10,6 +10,7 @@ struct StartDialog: View {
     let req: StartRequest
     @State private var wholeGroup = true
     @State private var busy = false
+    @State private var spindleByHand = false
 
     var body: some View {
         @Bindable var model = model
@@ -40,6 +41,9 @@ struct StartDialog: View {
         rows += [("Work zero (machine)", xyz(m.wco)), ("Tool now at (work)", xyz(m.wpos))]
         let overruns = b.map { travelOverruns($0, envelope: s.config.envelope, wco: m.wco) } ?? []
         let probed = m.lastProbe?.ok == true && (s.job.finishedAt.map { m.lastProbe!.t > $0 } ?? false)
+        // "Start next" runs a group that was checked (and confirmed) when it started.
+        let offCuts = req.next ? [] : ([item] + (wholeGroup ? following : [])).compactMap { f in f.spindleOffCut.map { (f.name, $0) } }
+        let blocked = !offCuts.isEmpty && !spindleByHand
 
         return DialogFrame(eyebrow: eyebrow, title: item.name, width: 600) {
             if !following.isEmpty {
@@ -63,6 +67,9 @@ struct StartDialog: View {
             if let c = model.conflict(for: item.id) {
                 Note(.warn, "This file has a conflict (\(c.kind.summary.lowercased())): this Mac's version will run.")
             }
+            if !offCuts.isEmpty {
+                SpindleOffConfirm(cuts: offCuts, byHand: $spindleByHand)
+            }
             if m.homed != true { Note(.info, "The machine isn't homed, so moves aren't checked against its travel.") }
             VStack(alignment: .leading, spacing: 6) {
                 check("Stock clamped and the right bit fitted and tight")
@@ -85,12 +92,13 @@ struct StartDialog: View {
             Button(busy ? "Starting…" : req.next ? "▶ Start next" : "▶ Start") {
                 busy = true
                 Task {
-                    let ok = await model.run(req.next ? .startNext : .start(fileId: item.id, group: following.isEmpty ? nil : wholeGroup, fromLine: nil))
+                    let ok = await model.run(req.next ? .startNext : .start(
+                        fileId: item.id, group: following.isEmpty ? nil : wholeGroup, fromLine: nil, spindleOff: offCuts.isEmpty ? nil : true))
                     busy = false
                     if ok { dismiss() }
                 }
             }
-            .gccButton(.primary, .large).keyboardShortcut(.defaultAction).disabled(busy)
+            .gccButton(.primary, .large).keyboardShortcut(.defaultAction).disabled(busy || blocked)
         }
     }
 
@@ -98,6 +106,24 @@ struct StartDialog: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "square").font(.system(size: 11)).foregroundStyle(Color.gold)
             Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// A program that cuts with the spindle off: GRBL would drive a still cutter into the work, and the spindle button
+/// can't start a spindle the program never turned on. Starting needs the box ticked.
+struct SpindleOffConfirm: View {
+    /// File name and 0-based source line of its first spindle-off cut.
+    let cuts: [(String, Int)]
+    @Binding var byHand: Bool
+
+    var body: some View {
+        Note(kind: .danger) {
+            Text("⚠ " + cuts.map { "\($0.0) cuts with the spindle off from line \($0.1 + 1)" }.joined(separator: "; ")
+                + ": the program never starts the spindle (M3 with an S speed) before it. KerfLine's spindle button can't start it either.")
+            Text("Add M3 S… to the program (in Fretboard Modeller: set Max spindle above 0) and send it again.")
+                .foregroundStyle(Color.steel)
+            Toggle("The spindle is started by hand for this job", isOn: $byHand)
         }
     }
 }

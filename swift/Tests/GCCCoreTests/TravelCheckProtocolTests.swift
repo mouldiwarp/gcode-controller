@@ -117,7 +117,7 @@ import Testing
         #expect(json == #"{"feed":3000,"type":"jog","x":1}"#)
         let all: [Command] = [
             .connect(port: "/dev/cu.usbserial-110"), .connect(port: nil), .home, .stop, .zero(axes: [.X, .Z]),
-            .start(fileId: "abc", group: true, fromLine: 120), .override(kind: .feed, action: .plus10), .mdi(line: "G0 X0"),
+            .start(fileId: "abc", group: true, fromLine: 120), .start(fileId: "abc", group: nil, fromLine: nil, spindleOff: true), .override(kind: .feed, action: .plus10), .mdi(line: "G0 X0"),
             .renameFolder(path: "a", to: "b"), .saveMacro(macro: Macro(id: "m", name: "Park", gcode: "G53 G0 Z-1")),
             .saveConfig(config: MachineConfigPatch(safeZ: 10)), .update(target: .agent),
         ]

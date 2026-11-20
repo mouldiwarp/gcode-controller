@@ -339,8 +339,8 @@ public actor Instance {
             if await session.isJobActive { throw MachineError("Can't disconnect while a job is running") }
             autoConnect = false
             await session.disconnect()
-        case .start(let fileId, let group, let fromLine):
-            try await startJob(fileId, runGroup: group == true, fromLine: fromLine, by: by)
+        case .start(let fileId, let group, let fromLine, let spindleOff):
+            try await startJob(fileId, runGroup: group == true, fromLine: fromLine, spindleOff: spindleOff == true, by: by)
         case .startNext:
             try await startNext(by: by)
         default:
@@ -388,7 +388,7 @@ public actor Instance {
 
     // MARK: Jobs (always from this Mac's library)
 
-    private func startJob(_ fileId: String, runGroup: Bool, fromLine: Int?, by: String) async throws {
+    private func startJob(_ fileId: String, runGroup: Bool, fromLine: Int?, spindleOff: Bool, by: String) async throws {
         if await session.job.status == .toolchange {
             throw MachineError("A group is waiting for a bit change. Use Start next, or End group first")
         }
@@ -404,7 +404,7 @@ public actor Instance {
             }
         }
         releasePins()
-        try await load(item, files, by: by, group: group, fromLine: fromLine)
+        try await load(item, files, by: by, group: group, fromLine: fromLine, spindleOff: spindleOff)
     }
 
     /// After a bit change: the next file of the group, as it was when the group started.
@@ -417,10 +417,12 @@ public actor Instance {
         let next = g.files[g.index + 1]
         guard let item = await library.item(next.id) else { throw MachineError("\(next.name) is no longer in the library") }
         g.index += 1
-        try await load(item, [item], by: by, group: g, fromLine: nil)
+        // The whole group was checked for spindle-off cuts when it started.
+        try await load(item, [item], by: by, group: g, fromLine: nil, spindleOff: true)
     }
 
-    private func load(_ item: LibraryItem, _ files: [LibraryItem], by: String, group: JobGroup?, fromLine: Int?) async throws {
+    /// `spindleOff`: the user confirmed running files that cut with the spindle off; otherwise they're refused.
+    private func load(_ item: LibraryItem, _ files: [LibraryItem], by: String, group: JobGroup?, fromLine: Int?, spindleOff: Bool) async throws {
         let previous = await session.job
         await session.markLoading(fileId: item.id, fileName: item.name, by: by)
         func fail(_ error: Error) async -> Error {
@@ -447,6 +449,13 @@ public actor Instance {
                 data = d
             }
             if f.id == item.id { text = String(decoding: data, as: UTF8.self) }
+            if !spindleOff {
+                let t = f.id == item.id ? text : String(decoding: data, as: UTF8.self)
+                let from = f.id == item.id ? fromLine.flatMap { i in streamableLines(t).dropFirst(i).first?.source } ?? 0 : 0
+                if let line = spindleOffCut(t, from: from) {
+                    throw await fail(MachineError(spindleOffMessage(f.name, line)))
+                }
+            }
         }
         // The machine could have changed state while loading.
         do {

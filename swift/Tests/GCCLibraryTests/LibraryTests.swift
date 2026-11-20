@@ -385,3 +385,25 @@ func until(_ ms: Int = 20000, _ cond: () async -> Bool) async -> Bool {
         #expect(clock.tick(wall: 1000) == Stamp(ms: 5000, counter: 4, replica: "abc"))
     }
 }
+
+extension Library {
+    /// Puts back an analysis row as a build from before the spindle check wrote it.
+    func writeOldAnalysis(_ sha: String) throws {
+        let json = #"{"size":10,"sourceLines":3,"streamLines":3,"estSeconds":1}"#
+        _ = try db.run("INSERT OR REPLACE INTO analysis(sha, json) VALUES(?, ?)", [sha, json])
+    }
+}
+
+@Suite struct AnalysisCacheTests {
+    /// Files analysed by an older build are worked out again, so they get the spindle check too.
+    @Test func olderAnalysesAreRedone() async throws {
+        let sb = Sandbox()
+        let lib = try await sb.open()
+        let item = try await lib.add(gcode(), AddOptions(name: "a.nc"))
+        #expect(item.spindleOffCut == 2)
+        try await lib.writeOldAnalysis(item.sha256)
+        let again = try #require(await lib.item(item.id))
+        #expect(again.spindleOffCut == 2)
+        #expect(again.streamLines == item.streamLines)
+    }
+}

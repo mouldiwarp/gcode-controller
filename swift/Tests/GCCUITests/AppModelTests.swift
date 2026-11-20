@@ -8,7 +8,7 @@ import Testing
 @testable import GCCUI
 
 private func gcode(_ n: Int = 3) -> Data {
-    Data((["G21 G90", "G0 Z-1"] + (1...n).map { "G1 X-\($0) Y-\($0) F3000" } + ["M30"]).joined(separator: "\n").utf8)
+    Data((["G21 G90", "M3 S12000", "G0 Z-1"] + (1...n).map { "G1 X-\($0) Y-\($0) F3000" } + ["M30"]).joined(separator: "\n").utf8)
 }
 
 private func tempDir() -> URL {

@@ -184,6 +184,19 @@ If soft limits are off (`$20=0`), GRBL will drive into a limit switch if asked. 
 
 Until the machine is homed, its position isn't known, so none of this applies. The Jog panel says so.
 
+## Cutting with the spindle off
+
+GRBL will happily run a cutting move (`G1`, `G2`, `G3`) with the spindle stopped, which drives a still cutter into the
+work. So the app checks each file for a feed move made before the program has started the spindle with `M3`/`M4` and an
+`S` speed (or after `M5`, `S0` or a program end). Probing moves (`G38.x`) don't count, and an `M3` on the same line as
+the cut does, because GRBL starts the spindle before the move.
+
+A file like that, such as Fretboard Modeller's output when its max spindle is set to manual, gets a warning in the
+Start and Resume dialogs naming the first such line. Start stays disabled until you tick **The spindle is started by hand
+for this job**. The Mac that owns the machine also refuses the job without that confirmation, so a script or the other
+Mac can't skip it. When resuming, only cuts from the resume line on count. A file group is checked in full at Start, and
+the files after the first then run without asking again.
+
 ## Dealing with a problem mid-cut
 
 - **Pause** stops the motion and leaves the spindle running. The Job panel then offers **Stop spindle**. **Resume** spins it back up, waits for it, and carries on.
