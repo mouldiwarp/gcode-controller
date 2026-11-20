@@ -13,7 +13,18 @@ public struct FoundHub: Sendable, Equatable {
     public var version: Int?
 }
 
-private let bonjourQueue = DispatchQueue(label: "gcc.bonjour")
+private let bonjourQueue: DispatchQueue = {
+    let q = DispatchQueue(label: "gcc.bonjour")
+    q.setSpecific(key: onBonjourQueueKey, value: true)
+    return q
+}()
+private let onBonjourQueueKey = DispatchSpecificKey<Bool>()
+
+/// Run `body` on the Bonjour queue and wait. Inline if already on it: a browser's last reference
+/// can go in one of its own callbacks, and `deinit` → `stop()` must not `sync` onto its own queue.
+private func onBonjourQueue(_ body: () -> Void) {
+    if DispatchQueue.getSpecific(key: onBonjourQueueKey) == true { body() } else { bonjourQueue.sync(execute: body) }
+}
 
 /// Keeps a service registered until stopped.
 public final class BonjourAdvert: @unchecked Sendable {
@@ -38,7 +49,7 @@ public final class BonjourAdvert: @unchecked Sendable {
     }
 
     public func stop() {
-        bonjourQueue.sync {
+        onBonjourQueue {
             if let ref { DNSServiceRefDeallocate(ref) }
             ref = nil
         }
@@ -63,7 +74,7 @@ public final class BonjourBrowser: @unchecked Sendable {
     }
 
     public func start() {
-        bonjourQueue.sync {
+        onBonjourQueue {
             var r: DNSServiceRef?
             let ctx = Unmanaged.passUnretained(self).toOpaque()
             let err = DNSServiceBrowse(&r, 0, 0, type, nil, { _, flags, iface, err, name, type, domain, ctx in
@@ -78,7 +89,7 @@ public final class BonjourBrowser: @unchecked Sendable {
     }
 
     public func stop() {
-        bonjourQueue.sync {
+        onBonjourQueue {
             if let browseRef { DNSServiceRefDeallocate(browseRef) }
             browseRef = nil
             for r in resolves.values { DNSServiceRefDeallocate(r) }
