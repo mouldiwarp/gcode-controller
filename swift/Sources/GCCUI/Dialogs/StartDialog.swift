@@ -71,6 +71,9 @@ struct StartDialog: View {
                 SpindleOffConfirm(cuts: offCuts, byHand: $spindleByHand)
             }
             if m.homed != true { Note(.info, "The machine isn't homed, so moves aren't checked against its travel.") }
+            Muted(m.homed == true
+                ? "Before the program runs, the cutter lifts to the top of Z, then moves along X, then Y, to the program's first point; the program lowers it there."
+                : "Before the program runs, the cutter lifts to the program's highest Z (not knowing the top of travel), then moves along X, then Y, to its first point.")
             VStack(alignment: .leading, spacing: 6) {
                 check("Stock clamped and the right bit fitted and tight")
                 if req.next {

@@ -1,5 +1,5 @@
 // Restart a stopped job part way through, from the line it stopped on or one you pick. As 1.0's
-// ResumeDialog: the plan (lift, move over, spin up, lower) comes from GCCCore's planResume.
+// ResumeDialog: the plan (lift, spin up, X, Y, lower) comes from GCCCore's planResume.
 
 import GCCCore
 import GCCNet
@@ -28,7 +28,7 @@ struct ResumeDialog: View {
         let index = n - 1
         let plan: Result<ResumePlan, Error>? = text.flatMap { t in
             guard index >= 1, index < lines.count else { return nil }
-            return Result { try planResume(t, index, ResumeOptions(travelZ: s.config.safeZ, spinup: 4, plungeFeed: 300)) }
+            return Result { try planResume(t, index, ResumeOptions(machine: s.machine, config: s.config)) }
         }
         let planned = try? plan?.get()
         let offCut = index >= 0 && index < lines.count ? offCuts.first { $0 >= lines[index].source } : nil
@@ -58,12 +58,19 @@ struct ResumeDialog: View {
             }
             if let p = planned {
                 Steps {
-                    Text("Lift to Z\(fixed(max(s.config.safeZ, p.start.z), 2)) (never past the top of travel).")
-                    Text("Move to X\(fixed(p.start.x, 2)) Y\(fixed(p.start.y, 2)), where line \(n) starts.")
+                    Text(s.machine.homed == true
+                        ? "Lift straight up to Z\(fixed(p.travelZ, 1)), just under the top of travel."
+                        : "Lift straight up to Z\(fixed(p.travelZ, 1)) (the machine isn't homed, so the top of travel isn't known).")
                     if p.state.spindle != "M5" {
                         Text("Start the spindle (\(p.state.spindle == "M3" ? "clockwise" : "counter-clockwise"), S\(short(p.state.speed))) and wait 4 s for it to reach speed.")
                     }
-                    Text(p.start.z < s.config.safeZ ? "Lower to Z\(fixed(p.start.z, 2)) at 300 mm/min, then carry on with the program." : "Carry on with the program.")
+                    Text("Move along X to X\(fixed(p.start.x, 2)), then along Y to Y\(fixed(p.start.y, 2)), where line \(n) starts.")
+                    if p.start.z < p.travelZ {
+                        Text((p.clearZ < p.travelZ ? "Drop to Z\(fixed(p.clearZ, 1)), then lower" : "Lower")
+                            + " to Z\(fixed(p.start.z, 2)) at \(short(min(300, s.config.jogFeedZ))) mm/min, then carry on with the program.")
+                    } else {
+                        Text("Carry on with the program.")
+                    }
                 }
                 if !p.state.warnings.isEmpty { Note(.warn, p.state.warnings.joined(separator: ". ") + ".") }
             }

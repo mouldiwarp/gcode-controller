@@ -155,6 +155,13 @@ start dialog offers to run the rest of the group in order. After each file the s
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All
 the files are copied to the machine Mac before the first one starts, so a Wi-Fi dropout can't strand the group.
 
+## How a job starts
+
+Before the first line of a file, the app lifts the cutter straight up to the top of Z travel (if the machine isn't
+homed, to the program's own highest Z), then moves X, then Y, over the program's first point. Only then does the
+program run: it starts the spindle and lowers Z itself, directly over where it cuts, so nothing is crossed low. A
+program that never says where X and Y start runs as it is.
+
 ## Start-up checks
 
 Each time the controller connects, the app reads its settings and compares them with the values the FoxAlien was set up with:
@@ -203,10 +210,13 @@ the files after the first then run without asking again.
 - GRBL can't jog while paused. To move the cutter away (clear chips, free a part, change a broken bit), press **Stop**. The job remembers the line the cutter was on, which is earlier than the line count because GRBL queues moves ahead.
 - When you are ready, use **Resume from line…** in the Job panel. It shows the program around that line, and you can go back a line or two if unsure. It then:
   1. restores the program's modes (units, distance mode, plane, work offset);
-  2. lifts to safe Z and moves over the start of that line;
-  3. starts the spindle and waits 4 s;
-  4. lowers onto the cut at 300 mm/min;
-  5. continues streaming.
+  2. lifts straight up to the top of Z travel (if the machine isn't homed, to the program's own highest Z; it never
+     moves down here);
+  3. starts the spindle and waits 4 s, before moving anywhere;
+  4. moves X, then Y, over the start of that line;
+  5. drops quickly to just above the cut (the program's travel height, at most 5 mm above it), then lowers onto the
+     cut at 300 mm/min (or the Z jog speed, if lower);
+  6. continues streaming.
 - If the machine alarmed or was switched off, home it first. Work zero is kept. Don't re-probe Z unless the bit changed.
 
 ## Surfacing the spoilboard

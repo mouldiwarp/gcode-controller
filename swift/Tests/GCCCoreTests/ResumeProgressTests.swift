@@ -20,21 +20,79 @@ import Testing
         #expect(later.inches && later.pos == [50, 40, -1])
     }
 
-    @Test func liftsMovesOverSpinsUpLowersAndRestoresTheModes() throws {
-        let plan = try planResume(program, index("G1Y40"), .init(travelZ: 5, spinup: 4, plungeFeed: 300))
-        #expect(plan.preamble == ["G21G90G17G94G54", "G0Z5", "G0X50Y10", "M3S12000", "G4P4", "G1Z-1F300", "G21G90G1", "F1000"])
+    /// Homed, at work Z 0, with the top of travel at work Z 60.
+    let homed = ResumeOptions(topZ: 60, currentZ: 0, spinup: 4, plungeFeed: 300)
+
+    @Test func liftsSpinsUpMovesXThenYThenLowers() throws {
+        let plan = try planResume(program, index("G1Y40"), homed)
+        #expect(plan.preamble == [
+            "G21G90G17G94G54", "G0Z60", "M3S12000", "G4P4", "G0X50", "G0Y10", "G0Z5", "G1Z-1F300", "G21G90G1F1000",
+        ])
         #expect(plan.start == Vec3(50, 10, -1))
+        #expect(plan.travelZ == 60 && plan.clearZ == 5)
     }
 
     @Test func restoresInchesAfterMovingInMm() throws {
-        let plan = try planResume(program, index("G1X1"), .init(travelZ: 5, spinup: 0, plungeFeed: 300))
-        #expect(Array(plan.preamble.suffix(2)) == ["G20G90G1", "F1000"])
-        #expect(plan.preamble[2] == "G0X50Y40")
+        var o = homed
+        o.spinup = 0
+        let plan = try planResume(program, index("G1X1"), o)
+        #expect(plan.preamble.last == "G20G90G1F1000")
+        #expect(plan.preamble.contains("G0X50") && plan.preamble.contains("G0Y40"))
+    }
+
+    /// The fretboard: Z zero under the board, cutting at about Z 7 and travelling at Z 14. Resuming used to "lift" to
+    /// the larger of safe Z (5) and the cut's own Z, so it crossed the work at cutting depth.
+    let board = ["G21", "G90", "G54", "M3 S18000", "G4 P5", "G0 Z14", "G0 X-9.25 Y-38.395", "G0 Z10", "G1 Z7 F1000",
+                 "G1 Y-24.433 F2500", "G1 Y-21.441 Z7.192", "G1 Y-18.449 Z7.358", "G1 Y-15.458 Z7.495"].joined(separator: "\n")
+
+    @Test func neverCrossesTheWorkAtCuttingDepth() throws {
+        let at = streamableLines(board).firstIndex { $0.text == "G1Y-15.458Z7.495" }!
+        let plan = try planResume(board, at, ResumeOptions(topZ: 64.3, currentZ: 6.9, spinup: 4, plungeFeed: 300))
+        #expect(plan.preamble == [
+            "G21G90G17G94G54", "G0Z64.3", "M3S18000", "G4P4", "G0X-9.25", "G0Y-18.449", "G0Z14", "G1Z7.358F300", "G21G90G1F2500",
+        ])
+        // Not homed: the program's own travel height, not safe Z.
+        let unhomed = try planResume(board, at, ResumeOptions(topZ: nil, currentZ: 6.9, safeZ: 5, spinup: 4, plungeFeed: 300))
+        #expect(unhomed.travelZ == 14)
+        #expect(Array(unhomed.preamble[1...]).prefix(1) == ["G0Z14"])
+    }
+
+    @Test func neverMovesDownToTravel() throws {
+        let plan = try planResume(program, index("G1Y40"), ResumeOptions(topZ: nil, currentZ: 30, spinup: 0, plungeFeed: 300))
+        #expect(plan.travelZ == 30)
+        #expect(plan.preamble[1] == "G0Z30")
+    }
+
+    /// Every move that goes down comes after every move across, and the spindle is on before any of them.
+    @Test(arguments: [true, false]) func theOrderIsSafe(isHomed: Bool) throws {
+        let o = isHomed ? homed : ResumeOptions(topZ: nil, currentZ: 0, spinup: 4, plungeFeed: 300)
+        let pre = try planResume(program, index("G1Y40"), o).preamble
+        let lift = pre.firstIndex { $0.hasPrefix("G0Z") }!, spin = pre.firstIndex { $0.hasPrefix("M3") }!
+        let x = pre.firstIndex { $0.hasPrefix("G0X") }!, y = pre.firstIndex { $0.hasPrefix("G0Y") }!
+        let down = pre.lastIndex { $0.hasPrefix("G1Z") }!
+        #expect(lift < spin && spin < x && x < y && y < down)
+    }
+
+    /// GRBL refuses G1 with no feed set (after a reset, say), so the feed goes on the same line as the modes.
+    @Test func theFeedComesWithTheMotionMode() throws {
+        let p = ["G21 G90", "G0 X0 Y0 Z5", "M3 S10000", "G1 F800", "G1 X10", "G1 X20"].joined(separator: "\n")
+        let plan = try planResume(p, 5, ResumeOptions(topZ: 5, currentZ: 5, spinup: 0, plungeFeed: 300))
+        #expect(plan.preamble.last == "G21G90G1F800")
+        #expect(!plan.preamble.contains { $0.hasPrefix("G1Z") })
+    }
+
+    @Test func aStartGoesOverTheFirstPointBeforeAnythingGoesDown() {
+        #expect(planStart(board, ResumeOptions(topZ: 64.3, currentZ: 64.3, spinup: 4, plungeFeed: 300))
+            == ["G21G90G94G54", "G0Z64.3", "G0X-9.25", "G0Y-38.395"])
+        // Not homed: up to the program's highest Z.
+        #expect(planStart(board, ResumeOptions(topZ: nil, currentZ: 2, spinup: 4, plungeFeed: 300))[1] == "G0Z14")
+        // A program that never says where X and Y are gets nothing added.
+        #expect(planStart("G21\nG0 Z5\nG1 Z-1 F100", homed).isEmpty)
     }
 
     @Test func refusesALineBeforeTheProgramHasSaidWhereTheToolIs() {
         #expect {
-            try planResume(program, index("G0Z5"), .init(travelZ: 5, spinup: 4, plungeFeed: 300))
+            try planResume(program, index("G0Z5"), homed)
         } throws: { ($0 as? ResumeError)?.description.contains("isn't known") == true }
     }
 

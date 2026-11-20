@@ -184,7 +184,7 @@ private func item(_ id: String, folder: String = "", group: String? = nil, index
         #expect(model.state?.startHint(selected: model.state?.library.first) == nil)
         #expect(await model.run(.start(fileId: id, group: nil, fromLine: nil)))
         let done = await until { model.state?.job.status == .done }
-        #expect(done)
+        #expect(done, "\(String(describing: model.state?.job)) \(String(describing: model.state?.machine)) \(String(describing: model.state?.console.map { "\($0.dir) \($0.text)" }.suffix(30)))")
         #expect(!model.jobRunningHere)
     }
 }

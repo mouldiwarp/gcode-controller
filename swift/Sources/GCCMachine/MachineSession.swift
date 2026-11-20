@@ -420,7 +420,7 @@ public actor MachineSession {
                 job.sourceLine = item.source ?? job.sourceLine
             }
             if let errorText {
-                let at = preamble ? "Resume set-up" : "Line \((item.source ?? 0) + 1)"
+                let at = preamble ? "Set-up move" : "Line \((item.source ?? 0) + 1)"
                 log(.error, "\(at) \"\(item.text)\" → \(errorText)")
                 pauseOnError("\(at) (\(item.text)) → \(errorText)")
             }
@@ -542,11 +542,15 @@ public actor MachineSession {
         let lines = streamableLines(text)
         let from = max(0, meta.fromLine ?? 0)
         if from >= lines.count { throw MachineError("The file has only \(lines.count) lines") }
-        var preamble: [String] = []
+        // Never lower the cutter before it's over the work: lift first, then X, then Y (see planStart/planResume).
+        let approach = ResumeOptions(machine: machine, config: config ?? .defaults)
+        var preamble: [String]
         if from > 0 {
-            let plan = try planResume(text, from, ResumeOptions(travelZ: travelZ(), spinup: 4, plungeFeed: min(300, config?.jogFeedZ ?? 300)))
+            let plan = try planResume(text, from, approach)
             preamble = plan.preamble
             for w in plan.state.warnings { log(.info, "Resume: \(w)", by: meta.by) }
+        } else {
+            preamble = planStart(text, approach)
         }
         jobLines = preamble.map { StreamLine(text: $0, source: -1) } + lines[from...]
         // From where the tool is now, so the first moves out to the work get their time too.
@@ -587,13 +591,6 @@ public actor MachineSession {
         pump()
     }
 
-    /// Work Z to travel at between cuts: safe Z, but never within 1 mm of the top of travel.
-    private func travelZ() -> Double {
-        let safeZ = config?.safeZ ?? 5
-        let top = (config?.envelope.max[2] ?? 0) - 1
-        return min(safeZ, top - machine.wco[2])
-    }
-
     /// The stream line the cutter is on: the last acknowledged lines are still queued in GRBL's
     /// planner, so walk back over as many moves as it holds. Arcs take several planner blocks per
     /// line, which only moves the answer earlier (re-cutting, never skipping).
@@ -615,7 +612,7 @@ public actor MachineSession {
     /// Where the machine has got to: the line it's executing and the estimated time done.
     private func trackProgress(_ wpos: Vec3) {
         guard let lowest = currentLine(), let progress else { return }
-        // During a resume's set-up moves the tool isn't on the program's path yet.
+        // During the set-up moves (getting over the start point) the tool isn't on the program's path yet.
         let settingUp = jobAckedAtStatus <= jobPreamble
         // Counting queued moves can land early (GRBL skips moves to where the tool already is, and
         // splits arcs into many moves), so go forward to the line whose path the tool is on.
