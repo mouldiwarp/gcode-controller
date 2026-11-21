@@ -87,6 +87,9 @@ public final class AppModel {
     // MARK: Updates and keep-awake
     public let build: BuildInfo
     public private(set) var update: UpdateStatus = .idle
+    /// This Mac's commit, short, when it isn't on GitHub yet (committed here but not pushed): the other Mac can't
+    /// update to it. Set by each update check.
+    public private(set) var unpublishedCode: String?
     private var checkTask: Task<Void, Never>?
     /// A release build's updater (Sparkle); nil for a build from git.
     private var release: ReleaseUpdater?
@@ -407,6 +410,9 @@ public final class AppModel {
         if manual { update = .checking }
         do {
             let c = try await u.check()
+            if let commit = build.code.commit {
+                unpublishedCode = await u.isPublished(commit) ? nil : build.code.shortCommit
+            }
             update = c.behind > 0 ? .available(c) : .idle
             if manual, c.behind == 0 { toast(.info, "Up to date (\(build.code.shortCommit))") }
         } catch {
@@ -434,7 +440,12 @@ public final class AppModel {
 
     private func performUpdate(_ u: Updater) async {
         do {
-            try await u.update { [weak self] step in await self?.updateStep(step) }
+            let updated = try await u.update { [weak self] step in await self?.updateStep(step) }
+            guard updated else {
+                update = .idle
+                await instance?.announce(.info, "\(name) already has the newest code on GitHub (\(build.code.shortCommit)), so there's nothing to update to. Code that's only committed on the other Mac has to be pushed first")
+                return
+            }
             update = .ready
             if jobRunningHere {
                 await instance?.announce(.info, "\(name) is updated. Restart it when the job has finished")

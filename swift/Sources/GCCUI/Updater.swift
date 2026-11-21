@@ -121,14 +121,25 @@ public struct Updater: Sendable {
     }
 
     /// Pull and rebuild; `step` reports progress. Nothing is installed unless the build succeeds.
-    public func update(step: @Sendable (String) async -> Void) async throws {
+    /// Returns false, without building, when the pull brings nothing this build doesn't already have (the other Mac
+    /// may run code that isn't on GitHub yet): rebuilding and restarting then would only start the same code again.
+    @discardableResult
+    public func update(step: @Sendable (String) async -> Void) async throws -> Bool {
         await step("Downloading the latest code")
         _ = try await git(
             ["pull", "--ff-only", "--quiet"],
             hint: "If files in \(repo.path) were changed by hand, commit or stash them first. Nothing was changed")
+        if let built, try await git(["rev-parse", "HEAD"]).trimmed == built { return false }
         await step("Building the app (a few minutes)")
-        guard let exe = build.first else { return }
+        guard let exe = build.first else { return true }
         _ = try await run(exe, Array(build.dropFirst()), hint: "The build failed, so this version stays installed")
+        return true
+    }
+
+    /// Whether `commit` is on the branch's upstream (GitHub), as of the last fetch. The other Mac can only update to
+    /// code it can pull. False for a commit that's only in this checkout, or not in it at all.
+    public func isPublished(_ commit: String) async -> Bool {
+        (try? await git(["merge-base", "--is-ancestor", commit, "@{u}"])) != nil
     }
 
     func git(_ args: [String], hint: String? = nil) async throws -> String {

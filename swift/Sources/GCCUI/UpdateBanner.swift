@@ -38,6 +38,12 @@ struct UpdateBanner: View {
         let other = s.link.via == .hub ? s.link.agentName : s.link.hubName
         if let other, let theirs = s.link.peerCode {
             switch model.peerCode {
+            case .ahead where model.unpublishedCode != nil:
+                // Updating would pull from GitHub, which doesn't have this Mac's code: it would rebuild the same version.
+                Banner(kind: .info, text: "\(other) runs older code (\(describe(theirs))) than this Mac (\(describe(model.build.code))), but this Mac's code isn't on GitHub yet, so \(other) can't update to it. Push it, then check again.") {
+                    Button("Check again") { Task { await model.checkForUpdates(manual: true) } }.gccButton(.normal, .small)
+                        .help("Look on GitHub again for this Mac's code")
+                }
             case .ahead:
                 Banner(kind: .info, text: "\(other) runs older code (\(describe(theirs))) than this Mac (\(describe(model.build.code))).") {
                     if let role = model.peerRole {

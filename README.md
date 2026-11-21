@@ -94,7 +94,10 @@ update that's ready waits for the job to finish.
 - **Downloaded app**: updates come from GitHub Releases, through [Sparkle](https://sparkle-project.org). Each update
   is checked against the release's signature before it's installed.
 - **Built from source**: **Update now** pulls the new code into the checkout it was built from, rebuilds, and
-  restarts. If you've changed files in the checkout, the update is refused rather than touching them. By hand:
+  restarts. If you've changed files in the checkout, the update is refused rather than touching them. The other Mac
+  can only update to code that's on GitHub: if this Mac runs commits that aren't pushed yet, the banner says so and
+  offers **Check again** (for after you push) instead of an update, and an update that finds nothing new on GitHub
+  doesn't rebuild or restart. By hand:
   `git pull && scripts/build-app.sh`, then quit and reopen the app. Until it's signed with a Developer ID, each
   rebuild is a new app to macOS's privacy settings, so after an update it may ask again for Documents and local
   network access. The start screen says so if it's waiting.

@@ -92,6 +92,33 @@ struct UpdaterTests {
         #expect(await steps.all.count == 2)
     }
 
+    /// The other Mac runs code that's committed there but not pushed: the pull brings nothing new, so don't rebuild
+    /// and restart on the same code (it would come straight back asking to update).
+    @Test func nothingNewOnGitHubMeansNoRebuild() async throws {
+        let r = try Repos()
+        let built = try r.head(r.mac)
+        let marker = r.dir.appending(path: "built")
+        let u = Updater(repo: r.mac, built: built, build: ["/usr/bin/touch", marker.path])
+        #expect(try await u.update { _ in } == false)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        try r.commit("Pushed", in: r.dev)
+        try r.sh("git -c core.hooksPath=/dev/null push --no-verify --quiet origin main", in: r.dev)
+        #expect(try await u.update { _ in } == true)
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    @Test func aCommitOnlyHereIsntPublished() async throws {
+        let r = try Repos()
+        let u = Updater(repo: r.dev, built: nil, build: ["/usr/bin/true"])
+        #expect(await u.isPublished(try r.head(r.dev)))
+        try r.commit("Not pushed", in: r.dev)
+        #expect(!(await u.isPublished(try r.head(r.dev))))
+        try r.sh("git -c core.hooksPath=/dev/null push --no-verify --quiet origin main", in: r.dev)
+        #expect(await u.isPublished(try r.head(r.dev)))
+        #expect(!(await u.isPublished("0123456789abcdef0123456789abcdef01234567")))
+    }
+
     @Test func aPullThatCantFastForwardChangesNothing() async throws {
         let r = try Repos()
         try r.commit("On GitHub", in: r.dev)
