@@ -16,6 +16,7 @@ struct JobPanel: View {
         let selected = model.selected
         let hint = s.startHint(selected: selected)
         let idle = s.machineReady && s.machine.status == .idle
+        let nextZ = next.flatMap { n in s.library.first { $0.id == n.id }?.zZero }
 
         Panel("Job") {
             if [.done, .stopped, .error].contains(job.status) {
@@ -33,6 +34,7 @@ struct JobPanel: View {
                         if let g = f.group { Text("group \(g)") }
                     }
                     .font(.system(size: 12)).foregroundStyle(Color.steel)
+                    ZZeroBadge(ref: f.zZero).padding(.top, 4)
                 }
                 if active || [.done, .stopped, .error].contains(job.status) {
                     progress(job)
@@ -46,7 +48,7 @@ struct JobPanel: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("1. The spindle is off. Fit the bit for this file.")
                     HStack {
-                        Text("2. Re-probe Z.")
+                        Text(nextZ.map { "2. Re-probe Z on the \($0 == .spoilboard ? "SPOILBOARD" : "TOP of the material")." } ?? "2. Re-probe Z.")
                         Button("Probe Z…") { model.openProbe() }.gccButton(.outlineGold, .small).disabled(!idle)
                     }
                     Text("3. Start the next file.")

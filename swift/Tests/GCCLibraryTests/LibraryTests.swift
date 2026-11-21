@@ -406,4 +406,14 @@ extension Library {
         #expect(again.spindleOffCut == 2)
         #expect(again.streamLines == item.streamLines)
     }
+
+    /// The Z-zero reference reaches library items, including ones analysed before it was read.
+    @Test func zZeroReachesItems() async throws {
+        let sb = Sandbox()
+        let lib = try await sb.open()
+        let item = try await lib.add(Data("; Z0 = SPOILBOARD surface (bottom of the stock)\nG21\nM3 S10000\nG1 X1 F500\n".utf8), AddOptions(name: "z.nc"))
+        #expect(item.zZero == .spoilboard)
+        try await lib.writeOldAnalysis(item.sha256)
+        #expect(try #require(await lib.item(item.id)).zZero == .spoilboard)
+    }
 }

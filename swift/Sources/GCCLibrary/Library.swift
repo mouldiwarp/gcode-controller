@@ -125,7 +125,7 @@ struct DiskRow {
 
 struct Analysis: Codable {
     /// Bumped when the analysis gains something, so cached rows from an older build are worked out again.
-    static let current = 2
+    static let current = 3
     var version: Int?
     var size: Int
     var sourceLines: Int
@@ -134,6 +134,7 @@ struct Analysis: Codable {
     var cutBounds: Bounds?
     var estSeconds: Double
     var spindleOffCut: Int?
+    var zZero: ZZeroReference?
 }
 
 public actor Library {
@@ -717,7 +718,7 @@ public actor Library {
         guard a.streamLines > 0 else { return nil }
         let result = Analysis(
             version: Analysis.current, size: data.count, sourceLines: a.sourceLines, streamLines: a.streamLines, bounds: a.bounds,
-            cutBounds: a.cutBounds, estSeconds: a.estSeconds, spindleOffCut: a.spindleOffCut)
+            cutBounds: a.cutBounds, estSeconds: a.estSeconds, spindleOffCut: a.spindleOffCut, zZero: a.zZero)
         try db.run("INSERT OR REPLACE INTO analysis(sha, json) VALUES(?, ?)", [sha, json(result)])
         return result
     }
@@ -727,7 +728,7 @@ public actor Library {
         return LibraryItem(
             id: e.id, name: e.name, folder: e.folder, source: e.source, size: a.size, sha256: e.sha, addedAt: e.addedAt,
             sourceLines: a.sourceLines, streamLines: a.streamLines, bounds: a.bounds, cutBounds: a.cutBounds,
-            estSeconds: a.estSeconds, group: e.group, groupIndex: e.groupIndex, spindleOffCut: a.spindleOffCut)
+            estSeconds: a.estSeconds, group: e.group, groupIndex: e.groupIndex, spindleOffCut: a.spindleOffCut, zZero: a.zZero)
     }
 
     func gcBlobs() {

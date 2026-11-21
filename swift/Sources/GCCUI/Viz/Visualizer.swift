@@ -152,6 +152,7 @@ struct Visualizer: View {
                         Text(item.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.offwhite).lineLimit(1)
                         Text("\(boundsDims(item.cutBounds ?? item.bounds)) · ~\(formatDuration(item.estSeconds)) · \(item.streamLines.formatted()) lines")
                             .font(.system(size: 12)).foregroundStyle(Color.steel)
+                        ZZeroBadge(ref: item.zZero, compact: true).padding(.top, 2)
                         let overruns = connected ? item.bounds.map { travelOverruns($0, envelope: env, wco: wco) } ?? [] : []
                         if !overruns.isEmpty {
                             Text("⚠ From this work zero the toolpath leaves the machine's travel: \(overruns.joined(separator: "; ")). \(overrunAdvice(envelope: env, wco: wco))")

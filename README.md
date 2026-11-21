@@ -150,6 +150,14 @@ at the top level. Re-sending a file with the same name replaces it, and the old 
 3. Press **Probe**. The bit touches down fast, lifts 2 mm and touches again slowly. Z0 is then set to the stock surface
    and the bit lifts clear. If nothing is touched, GRBL stops with ALARM 5 and nothing is changed.
 
+**Where Z zero goes.** A file made to be zeroed on the spoilboard cuts a stock thickness too deep if you zero on the
+material, and one made for the material top cuts in the air if you zero on the spoilboard. KerfLine reads the
+file's header and shows a badge under its name in the job panel and the 3D view: **Z zero: TOP of the material**
+(gold) or **Z zero: SPOILBOARD** (orange). The start dialog repeats it in its checklist, and the bit-change step says
+which surface to re-probe on. Fretboard Modeller and Swarf write it in words (`Z0 = TOP of stock`,
+`Z0 = SPOILBOARD surface …`), and older Swarf files are read from their stock-space work zero. Other files can say it
+the same way in a comment near the top; one that doesn't shows **Z zero: not stated**, so check where it was made.
+
 **File groups.** Swarf sends one file per tool (and side A / side B) as a group. When you start a grouped file, the
 start dialog offers to run the rest of the group in order. After each file the spindle is turned off and the job
 waits in **Bit change**: fit the next bit, re-probe Z, then press **Start next** (or **End group** to stop there). All

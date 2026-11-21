@@ -182,11 +182,13 @@ public struct LibraryItem: Codable, Equatable, Sendable, Identifiable {
     /// 0-based source line of the first cutting move made with the spindle off, if the program has one
     /// (see `ProgramAnalysis.spindleOffCut`). Nil from a Mac that predates the check.
     public var spindleOffCut: Int?
+    /// Where the file's header says Z zero is taken. Nil when it doesn't say, or from a Mac that predates reading it.
+    public var zZero: ZZeroReference?
 
     public init(
         id: String, name: String, folder: String, source: String, size: Int, sha256: String, addedAt: Double,
         sourceLines: Int, streamLines: Int, bounds: Bounds?, cutBounds: Bounds?, estSeconds: Double,
-        group: String? = nil, groupIndex: Int? = nil, spindleOffCut: Int? = nil
+        group: String? = nil, groupIndex: Int? = nil, spindleOffCut: Int? = nil, zZero: ZZeroReference? = nil
     ) {
         self.id = id
         self.name = name
@@ -203,6 +205,7 @@ public struct LibraryItem: Codable, Equatable, Sendable, Identifiable {
         self.group = group
         self.groupIndex = groupIndex
         self.spindleOffCut = spindleOffCut
+        self.zZero = zZero
     }
 }
 

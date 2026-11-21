@@ -54,6 +54,7 @@ struct StartDialog: View {
                 }
             }
             KV(rows: rows, mono: ["Cut extents", "Work zero (machine)", "Tool now at (work)"])
+            ZZeroBadge(ref: item.zZero)
             if !overruns.isEmpty, m.homed == true {
                 Note(kind: .warn) {
                     Text("⚠ " + overruns.joined(separator: "; ") + ".")
@@ -78,13 +79,14 @@ struct StartDialog: View {
                 check("Stock clamped and the right bit fitted and tight")
                 if req.next {
                     HStack(spacing: 8) {
-                        check("Z re-probed with the new bit")
+                        check("Z re-probed with the new bit, " + zZeroCheck(item.zZero).prefix(1).lowercased() + zZeroCheck(item.zZero).dropFirst())
                         if probed { Text("(done)").foregroundStyle(Color.gold) } else {
                             Button("Probe Z") { model.openProbe() }.gccButton(.outlineGold, .small)
                         }
                     }
                 } else {
                     check("Work zero set for this file (X, Y and Z)")
+                    check(zZeroCheck(item.zZero))
                 }
                 if let r = foxAlien.spindleReminder, !m.simulated { check(r) }
                 check("Dust collection on, and nobody near the machine")

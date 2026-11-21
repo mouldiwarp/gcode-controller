@@ -341,6 +341,8 @@ public struct ProgramAnalysis: Sendable {
     /// 0-based source line of the first feed move made with the spindle off (never started, M5, or S0), if any.
     /// GRBL runs such a move: the cutter is driven into the work standing still. Probe moves don't count.
     public var spindleOffCut: Int?
+    /// Where the header says Z zero is taken, if it says (`zZeroReference`).
+    public var zZero: ZZeroReference?
 }
 
 /// Split on \r\n, \r or \n, keeping empty lines (so indexes match the file's lines).
@@ -413,7 +415,7 @@ public func analyzeProgram(_ text: String, options: InterpreterOptions = .init()
     return ProgramAnalysis(
         sourceLines: lines.count, streamLines: streamLines, segments: segments, bounds: bounds, cutBounds: cutBounds,
         estSeconds: est, feedDistance: feedDistance, rapidDistance: rapidDistance, usesSpindle: usesSpindle,
-        spindleOffCut: spindleOffCut)
+        spindleOffCut: spindleOffCut, zZero: zZeroReference(text))
 }
 
 /// 0-based source line of the first feed move at or after source line `from` made with the spindle off: the
